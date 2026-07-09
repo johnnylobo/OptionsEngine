@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
-from options_income_engine.holdings import parse_holdings_csv
+from options_income_engine.holdings import HoldingsCsvError, parse_holdings_csv
 from options_income_engine.models import UserConfig
 from options_income_engine.portfolio import build_portfolio_summary
 from options_income_engine.preferences import load_ticker_profiles
@@ -47,6 +47,14 @@ if uploaded is None:
 
 try:
     holdings = parse_holdings_csv(uploaded)
+except HoldingsCsvError as exc:
+    st.error(
+        "The uploaded file does not look like a holdings CSV.\n\n"
+        "Please export holdings with Symbol and Quantity/Shares columns."
+    )
+    if exc.preview:
+        st.code(exc.preview, language="text")
+    st.stop()
 except Exception as exc:
     st.error(str(exc))
     st.stop()
