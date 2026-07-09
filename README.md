@@ -19,7 +19,25 @@ It ranks candidate trades only; it never submits orders or connects to Merrill f
 - Earnings-before-expiration trades are rejected.
 - Wide spreads, low volume, low open interest, and assignment risk are surfaced clearly.
 
-## Setup
+## Easy Mode
+
+On macOS, double-click `run_app.command` to start the app. The first run may take a minute because it creates the local Python environment and installs the app requirements.
+
+You can also run one command from this folder:
+
+```bash
+./run_app.command
+```
+
+Once the app opens:
+
+- Upload your Merrill holdings CSV.
+- If the app cannot find the holdings table automatically, use the Holdings Import Wizard to pick the header row and map Symbol and Quantity/Shares.
+- If you do not have a CSV handy, click `Use Demo Portfolio` to explore the dashboard with sample holdings and mock market data.
+
+You do not need to clean Merrill CSV files manually. The import flow is designed to handle account summaries, blank rows, quoted column names, trailing spaces, and share quantities with commas.
+
+## Manual Setup
 
 ```bash
 python -m venv .venv
@@ -75,6 +93,8 @@ Optional columns:
 - `Account`
 
 See `data/sample_holdings.csv`.
+
+If automatic import cannot identify the holdings table, the app opens a Holdings Import Wizard instead of stopping. The wizard previews the first 100 CSV rows, lets you choose the real header row, and lets you map Symbol and Quantity/Shares columns manually, with optional Price, Market Value, and Description columns. This is designed for messy brokerage exports with account summaries, disclaimers, blank rows, repeated section headers, quoted headers, and trailing spaces in column names.
 
 ## Default Portfolio Tiers
 

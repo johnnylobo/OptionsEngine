@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from dataclasses import dataclass
 from io import BytesIO, StringIO
 from typing import Optional, Union
 
@@ -24,6 +25,22 @@ class HoldingsCsvError(ValueError):
             else message
         )
         super().__init__(details)
+
+
+@dataclass(frozen=True)
+class ManualHoldingsMapping:
+    header_row: int
+    symbol_col: int
+    quantity_col: int
+    price_col: Optional[int] = None
+    market_value_col: Optional[int] = None
+    description_col: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class ManualHoldingsParseResult:
+    holdings: list[Holding]
+    warnings: list[str]
 
 
 def parse_holdings_csv(file: Union[BytesIO, StringIO]) -> list[Holding]:
@@ -92,6 +109,59 @@ def parse_holdings_csv(file: Union[BytesIO, StringIO]) -> list[Holding]:
         holdings.append(Holding(ticker=ticker, shares=shares, cost_basis=cost_basis, account=account))
 
     return holdings
+
+
+def read_holdings_csv_rows(file: Union[BytesIO, StringIO]) -> list[list[str]]:
+    raw_text = _read_file_text(file)
+    preview = _preview_lines(raw_text)
+    try:
+        return list(csv.reader(StringIO(raw_text)))
+    except csv.Error as exc:
+        raise _friendly_error(preview, str(exc)) from exc
+
+
+def normalize_header(value: object) -> str:
+    return _normalize_column(value)
+
+
+def parse_numeric_value(value: object) -> float:
+    return float(_clean_number(value))
+
+
+def parse_holdings_from_mapping(
+    rows: list[list[str]],
+    mapping: ManualHoldingsMapping,
+) -> ManualHoldingsParseResult:
+    holdings: list[Holding] = []
+    warnings: list[str] = []
+    header_len = len(rows[mapping.header_row]) if mapping.header_row < len(rows) else 0
+
+    for row_number, row in enumerate(rows[mapping.header_row + 1 :], start=mapping.header_row + 2):
+        normalized_row = [_normalize_column(cell) for cell in row]
+        if _is_blank_row(normalized_row):
+            continue
+        if _looks_like_holdings_header(normalized_row):
+            continue
+        if _is_account_summary_row(row, mapping.symbol_col, mapping.quantity_col, header_len):
+            continue
+
+        raw_symbol = _cell(row, mapping.symbol_col)
+        ticker = normalize_ticker(raw_symbol)
+        if not ticker or ticker in {"CASH", "MMDA", "SPAXX"}:
+            continue
+
+        raw_quantity = _cell(row, mapping.quantity_col)
+        if not raw_quantity.strip():
+            continue
+        try:
+            shares = int(parse_numeric_value(raw_quantity))
+        except (TypeError, ValueError):
+            warnings.append(f"Skipped row {row_number}: quantity could not be parsed for {ticker}.")
+            continue
+
+        holdings.append(Holding(ticker=ticker, shares=shares, cost_basis=None, account=None))
+
+    return ManualHoldingsParseResult(holdings=holdings, warnings=warnings)
 
 
 def _read_file_text(file: Union[BytesIO, StringIO]) -> str:
