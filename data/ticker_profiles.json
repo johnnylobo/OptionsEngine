@@ -1,0 +1,137 @@
+[
+  {
+    "ticker": "TQQQ",
+    "tier": "Tier 1 core compounder",
+    "category": "Core Compounders",
+    "own_more_score": 4,
+    "happy_to_sell_score": 1,
+    "max_contracts": 1,
+    "notes": "High conviction compounding position; be selective with covered calls."
+  },
+  {
+    "ticker": "NVDA",
+    "tier": "Tier 1 core compounder",
+    "category": "Core Compounders",
+    "own_more_score": 5,
+    "happy_to_sell_score": 1,
+    "max_contracts": 1,
+    "notes": "Core AI compounder; prefer owning more over selling shares away."
+  },
+  {
+    "ticker": "GOOG",
+    "tier": "Tier 1 core compounder",
+    "category": "Core Compounders",
+    "own_more_score": 4,
+    "happy_to_sell_score": 2,
+    "max_contracts": 1,
+    "notes": "Core platform compounder; covered calls should require strong compensation."
+  },
+  {
+    "ticker": "AMZN",
+    "tier": "Tier 1 core compounder",
+    "category": "Core Compounders",
+    "own_more_score": 4,
+    "happy_to_sell_score": 2,
+    "max_contracts": 1,
+    "notes": "Core compounder; prefer cautious call sizing."
+  },
+  {
+    "ticker": "MU",
+    "tier": "Tier 2 volatility harvest",
+    "category": "Volatility Harvest / Thematic",
+    "own_more_score": 3,
+    "happy_to_sell_score": 4,
+    "max_contracts": 2,
+    "notes": "Cyclical volatility candidate."
+  },
+  {
+    "ticker": "AEHR",
+    "tier": "Tier 2 volatility harvest",
+    "category": "Volatility Harvest / Thematic",
+    "own_more_score": 3,
+    "happy_to_sell_score": 4,
+    "max_contracts": 2,
+    "notes": "Thematic position with higher volatility."
+  },
+  {
+    "ticker": "NBIS",
+    "tier": "Tier 2 volatility harvest",
+    "category": "Volatility Harvest / Thematic",
+    "own_more_score": 3,
+    "happy_to_sell_score": 4,
+    "max_contracts": 2,
+    "notes": "Thematic volatility harvest candidate."
+  },
+  {
+    "ticker": "IREN",
+    "tier": "Tier 2 volatility harvest",
+    "category": "Volatility Harvest / Thematic",
+    "own_more_score": 3,
+    "happy_to_sell_score": 4,
+    "max_contracts": 2,
+    "notes": "Higher volatility thematic candidate."
+  },
+  {
+    "ticker": "CRWD",
+    "tier": "Tier 2 volatility harvest",
+    "category": "Volatility Harvest / Thematic",
+    "own_more_score": 3,
+    "happy_to_sell_score": 4,
+    "max_contracts": 2,
+    "notes": "Quality growth with harvestable volatility."
+  },
+  {
+    "ticker": "DELL",
+    "tier": "Tier 2 volatility harvest",
+    "category": "Volatility Harvest / Thematic",
+    "own_more_score": 3,
+    "happy_to_sell_score": 4,
+    "max_contracts": 2,
+    "notes": "Infrastructure thematic volatility candidate."
+  },
+  {
+    "ticker": "AMD",
+    "tier": "Tier 2 volatility harvest",
+    "category": "Volatility Harvest / Thematic",
+    "own_more_score": 4,
+    "happy_to_sell_score": 3,
+    "max_contracts": 2,
+    "notes": "Semiconductor position; balanced between owning more and harvesting premium."
+  },
+  {
+    "ticker": "SMH",
+    "tier": "Tier 2 volatility harvest",
+    "category": "Volatility Harvest / Thematic",
+    "own_more_score": 4,
+    "happy_to_sell_score": 3,
+    "max_contracts": 2,
+    "notes": "Semiconductor basket exposure."
+  },
+  {
+    "ticker": "SOXL",
+    "tier": "Tier 2 volatility harvest",
+    "category": "Volatility Harvest / Thematic",
+    "own_more_score": 2,
+    "happy_to_sell_score": 5,
+    "max_contracts": 1,
+    "notes": "Leveraged semiconductor exposure; harvest premium aggressively and size tightly."
+  },
+  {
+    "ticker": "RKLB",
+    "tier": "Tier 2 volatility harvest",
+    "category": "Volatility Harvest / Thematic",
+    "own_more_score": 4,
+    "happy_to_sell_score": 3,
+    "max_contracts": 2,
+    "notes": "Space thematic with high volatility."
+  },
+  {
+    "ticker": "LUNR",
+    "tier": "Tier 2 volatility harvest",
+    "category": "Volatility Harvest / Thematic",
+    "own_more_score": 3,
+    "happy_to_sell_score": 4,
+    "max_contracts": 2,
+    "notes": "Speculative space thematic; premium harvest candidate."
+  }
+]

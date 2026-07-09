@@ -13,6 +13,7 @@ It ranks candidate trades only; it never submits orders or connects to Merrill f
 - No broker login scraping.
 - No brokerage credential storage.
 - Merrill holdings are uploaded manually, and any trade execution remains manual.
+- The preference engine is decision support only; it does not place, route, or stage orders.
 - API keys live only in `.env`.
 - Earnings-before-expiration trades are rejected.
 - Wide spreads, low volume, low open interest, and assignment risk are surfaced clearly.
@@ -117,11 +118,38 @@ Ranking:
 
 - Candidates are ranked by Premium Efficiency Score.
 - Premium Efficiency Score = premium collected x IV Rank / assignment probability / capital required.
+- Ticker preferences adjust the score after premium efficiency is calculated.
 - If a provider does not supply IV Rank, the engine uses a neutral `1.0` value so candidates can still be ranked.
+
+## John Preference Engine
+
+Ticker-level preferences live in `data/ticker_profiles.json`.
+
+Each profile supports:
+
+- `ticker`
+- `tier`
+- `category`
+- `own_more_score`: 1 through 5
+- `happy_to_sell_score`: 1 through 5
+- `max_contracts`
+- `notes`
+
+Default profile categories:
+
+- Core Compounders: `TQQQ`, `NVDA`, `GOOG`, `AMZN`
+- Volatility Harvest / Thematic: `MU`, `AEHR`, `NBIS`, `IREN`, `CRWD`, `DELL`, `AMD`, `SMH`, `SOXL`, `RKLB`, `LUNR`
+
+Preference rules:
+
+- Covered calls are penalized when `happy_to_sell_score` is low.
+- Cash-secured puts are boosted when `own_more_score` is high.
+- `max_contracts` caps both covered-call and cash-secured-put sizing for that ticker.
+- To use a different JSON profile file, set `TICKER_PROFILES_PATH`.
 
 ## Output Columns
 
-The ranked table includes ticker, strategy, expiration, strike, current price, bid, ask, mid, delta, IV Rank, estimated assignment probability, Premium Efficiency Score, premium per contract, total premium, shares covered, cash required, capital at risk, assignment outcome, effective entry price, percent out-of-the-money, weekly yield, annualized yield, liquidity warning, earnings warning, recommendation, suggested limit price, tier, score, and contract count.
+The ranked table includes ticker, strategy, expiration, strike, current price, bid, ask, mid, delta, IV Rank, estimated assignment probability, Premium Efficiency Score, premium per contract, total premium, shares covered, cash required, capital at risk, assignment outcome, effective entry price, percent out-of-the-money, weekly yield, annualized yield, liquidity warning, earnings warning, recommendation, suggested limit price, tier, category, own more score, happy to sell score, max contracts, profile notes, preference adjustment, score, and contract count.
 
 ## Data Providers
 

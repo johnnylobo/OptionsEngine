@@ -29,6 +29,17 @@ class UserConfig:
 
 
 @dataclass(frozen=True)
+class TickerProfile:
+    ticker: str
+    tier: str
+    category: str
+    own_more_score: int
+    happy_to_sell_score: int
+    max_contracts: Optional[int] = None
+    notes: str = ""
+
+
+@dataclass(frozen=True)
 class EquitySnapshot:
     ticker: str
     price: float
@@ -80,5 +91,11 @@ class Candidate:
     recommendation: Recommendation
     suggested_limit_price: float
     tier: str
+    category: str
+    own_more_score: int
+    happy_to_sell_score: int
+    max_contracts: Optional[int]
+    profile_notes: str
+    preference_adjustment: float
     score: float
     contracts: int

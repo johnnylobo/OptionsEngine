@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-from .models import Candidate, EquitySnapshot, OptionContract, Recommendation, Strategy, UserConfig
-from .tiers import get_tier
+from .models import Candidate, EquitySnapshot, OptionContract, Recommendation, Strategy, TickerProfile, UserConfig
+from .preferences import default_ticker_profile
 
 
 def score_candidate(
@@ -14,6 +14,7 @@ def score_candidate(
     snapshot: EquitySnapshot,
     contracts: int,
     config: UserConfig,
+    profile: Optional[TickerProfile] = None,
 ) -> Optional[Candidate]:
     if contract.bid <= 0 or contract.ask <= 0:
         return None
@@ -30,6 +31,7 @@ def score_candidate(
     if strategy == "Cash-Secured Put" and contract.strike >= current_price:
         return None
 
+    profile = profile or default_ticker_profile(contract.ticker)
     mid = round((contract.bid + contract.ask) / 2, 2)
     spread_pct = (contract.ask - contract.bid) / mid if mid > 0 else 1.0
     assignment_probability = abs_delta
@@ -44,12 +46,14 @@ def score_candidate(
     )
     weekly_yield = total_premium / capital_at_risk if capital_at_risk > 0 else 0
     annualized_yield = weekly_yield * 52
-    premium_efficiency_score = _premium_efficiency_score(
+    base_premium_efficiency_score = _premium_efficiency_score(
         total_premium=total_premium,
         iv_rank=iv_rank,
         assignment_probability=assignment_probability,
         capital_required=capital_at_risk,
     )
+    preference_adjustment = _preference_adjustment(strategy, profile)
+    premium_efficiency_score = base_premium_efficiency_score * preference_adjustment
     percent_otm = (
         (contract.strike - current_price) / current_price
         if strategy == "Covered Call"
@@ -64,7 +68,7 @@ def score_candidate(
     )
     earnings_warning = _earnings_warning(snapshot.next_earnings_date, contract.expiration)
     liquidity_warning = _liquidity_warning(contract, spread_pct, config.max_spread_pct)
-    tier = get_tier(contract.ticker)
+    tier = profile.tier
 
     base_score = (
         min(weekly_yield / max(config.min_weekly_yield, 0.0001), 2.5) * 26
@@ -73,7 +77,7 @@ def score_candidate(
         + _spread_score(spread_pct, config.max_spread_pct) * 14
         + _liquidity_score(contract) * 14
         + _tier_score(tier, strategy, weekly_yield, config.min_weekly_yield) * 14
-    )
+    ) * preference_adjustment
     if earnings_warning:
         base_score -= 80
     if spread_pct > config.max_spread_pct:
@@ -115,6 +119,12 @@ def score_candidate(
         recommendation=recommendation,
         suggested_limit_price=round(max(contract.bid, mid), 2),
         tier=tier,
+        category=profile.category,
+        own_more_score=profile.own_more_score,
+        happy_to_sell_score=profile.happy_to_sell_score,
+        max_contracts=profile.max_contracts,
+        profile_notes=profile.notes,
+        preference_adjustment=round(preference_adjustment, 4),
         score=round(max(base_score, 0), 2),
         contracts=contracts,
     )
@@ -138,6 +148,14 @@ def _premium_efficiency_score(
     probability = max(assignment_probability, 0.0001)
     capital = max(capital_required, 0.01)
     return (total_premium * iv_rank) / probability / capital
+
+
+def _preference_adjustment(strategy: Strategy, profile: TickerProfile) -> float:
+    if strategy == "Covered Call":
+        score = profile.happy_to_sell_score
+    else:
+        score = profile.own_more_score
+    return round(1 + ((score - 3) * 0.15), 4)
 
 
 def _assignment_outcome(
