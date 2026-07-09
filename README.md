@@ -13,6 +13,8 @@ It ranks candidate trades only; it never submits orders or connects to Merrill f
 - No broker login scraping.
 - No brokerage credential storage.
 - Merrill holdings are uploaded manually, and any trade execution remains manual.
+- The preference engine is decision support only; it does not place, route, or stage orders.
+- Portfolio intelligence is also decision support only; it does not automate trades or connect to Merrill for execution.
 - API keys live only in `.env`.
 - Earnings-before-expiration trades are rejected.
 - Wide spreads, low volume, low open interest, and assignment risk are surfaced clearly.
@@ -117,11 +119,96 @@ Ranking:
 
 - Candidates are ranked by Premium Efficiency Score.
 - Premium Efficiency Score = premium collected x IV Rank / assignment probability / capital required.
+- Ticker preferences adjust the score after premium efficiency is calculated.
 - If a provider does not supply IV Rank, the engine uses a neutral `1.0` value so candidates can still be ranked.
+
+## John Preference Engine
+
+Ticker-level preferences live in `data/ticker_profiles.json`.
+
+Each profile supports:
+
+- `ticker`
+- `tier`
+- `category`
+- `own_more_score`: 1 through 5
+- `happy_to_sell_score`: 1 through 5
+- `max_contracts`
+- `notes`
+
+Default profile categories include:
+
+- Core Compounder
+- Semiconductor
+- AI Infrastructure
+- Cybersecurity
+- Crypto Infrastructure
+- Space
+- Energy
+- Cash
+- Other
+
+Preference rules:
+
+- Covered calls are penalized when `happy_to_sell_score` is low.
+- Cash-secured puts are boosted when `own_more_score` is high.
+- `max_contracts` caps both covered-call and cash-secured-put sizing for that ticker.
+- To use a different JSON profile file, set `TICKER_PROFILES_PATH`.
+
+## Portfolio Intelligence
+
+The engine uses holdings, current prices, cash balance, and ticker profiles to calculate portfolio exposure before ranking trades.
+
+For each holding, the portfolio model calculates:
+
+- ticker
+- shares
+- current price
+- market value
+- profile category
+- portfolio weight percentage
+
+The dashboard shows:
+
+- total portfolio market value
+- cash balance
+- category exposure percentages
+- top 10 ticker exposures
+- largest single-name concentration
+- largest category concentration
+
+Option exposure is simulated before recommendations are ranked.
+
+Covered calls calculate:
+
+- shares currently owned
+- shares covered
+- shares remaining if called away
+- market value at risk of being sold
+- category exposure reduction if called away
+
+Cash-secured puts calculate:
+
+- cash required
+- shares acquired if assigned
+- effective entry price
+- new position value if assigned
+- category exposure increase if assigned
+
+Portfolio risk alerts include:
+
+- single ticker exposure above 20%
+- category exposure above 40%
+- put assignment using more than 50% of available cash
+- covered call covering more than 50% of owned shares
+- assignment materially increasing already-high category exposure
+- selling calls materially reducing exposure to a core compounder
+
+These alerts adjust scoring so the engine penalizes trades that create excessive ticker/category concentration, use too much cash, or sell too much of a core compounder. Trades that generate premium while keeping concentration balanced can receive a modest boost.
 
 ## Output Columns
 
-The ranked table includes ticker, strategy, expiration, strike, current price, bid, ask, mid, delta, IV Rank, estimated assignment probability, Premium Efficiency Score, premium per contract, total premium, shares covered, cash required, capital at risk, assignment outcome, effective entry price, percent out-of-the-money, weekly yield, annualized yield, liquidity warning, earnings warning, recommendation, suggested limit price, tier, score, and contract count.
+The ranked table includes ticker, strategy, expiration, strike, current price, bid, ask, mid, delta, IV Rank, estimated assignment probability, Premium Efficiency Score, premium per contract, total premium, shares covered, cash required, capital at risk, assignment outcome, effective entry price, percent out-of-the-money, weekly yield, annualized yield, liquidity warning, earnings warning, recommendation, suggested limit price, tier, category, own more score, happy to sell score, max contracts, profile notes, preference adjustment, current ticker weight, current category weight, post-assignment ticker weight, post-assignment category weight, cash used if assigned, shares remaining if called away, portfolio risk alerts, portfolio risk adjustment, score, and contract count.
 
 ## Data Providers
 

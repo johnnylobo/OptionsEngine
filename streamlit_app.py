@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 
 from options_income_engine.holdings import parse_holdings_csv
 from options_income_engine.models import UserConfig
+from options_income_engine.portfolio import build_portfolio_summary
+from options_income_engine.preferences import load_ticker_profiles
 from options_income_engine.providers import MarketDataError, build_provider
 from options_income_engine.screener import screen_income_candidates
 from options_income_engine.tiers import default_watchlist
@@ -69,8 +71,15 @@ if not run:
 
 try:
     provider = build_provider()
+    profiles = load_ticker_profiles()
     with st.spinner("Fetching option chains and scoring candidates..."):
-        candidates = screen_income_candidates(holdings=holdings, config=config, provider=provider)
+        portfolio = build_portfolio_summary(
+            holdings=holdings,
+            provider=provider,
+            profiles=profiles,
+            cash_balance=available_cash,
+        )
+        candidates = screen_income_candidates(holdings=holdings, config=config, provider=provider, profiles=profiles)
 except MarketDataError as exc:
     st.error(str(exc))
     st.info("For a no-key demo, set OPTIONS_PROVIDER=mock in your .env file.")
@@ -82,6 +91,48 @@ except Exception as exc:
 if not candidates:
     st.warning("No candidates passed the filters. Try a wider delta range, lower minimum yield, or a later expiration.")
     st.stop()
+
+st.subheader("Portfolio Intelligence")
+metric_columns = st.columns(4)
+metric_columns[0].metric("Portfolio Market Value", f"${portfolio.total_portfolio_market_value:,.2f}")
+metric_columns[1].metric("Cash Balance", f"${portfolio.cash_balance:,.2f}")
+largest_single = portfolio.largest_single_name
+metric_columns[2].metric(
+    "Largest Single Name",
+    f"{largest_single.ticker} {largest_single.portfolio_weight * 100:.2f}%" if largest_single else "N/A",
+)
+largest_category = portfolio.largest_category
+metric_columns[3].metric(
+    "Largest Category",
+    f"{largest_category[0]} {largest_category[1] * 100:.2f}%" if largest_category else "N/A",
+)
+
+category_df = pd.DataFrame(
+    [
+        {"Category": category, "Exposure %": weight * 100}
+        for category, weight in sorted(portfolio.category_exposure.items())
+    ]
+)
+top_ticker_df = pd.DataFrame(
+    [
+        {
+            "Ticker": holding.ticker,
+            "Shares": holding.shares,
+            "Current Price": holding.current_price,
+            "Market Value": holding.market_value,
+            "Category": holding.category,
+            "Portfolio Weight %": holding.portfolio_weight * 100,
+        }
+        for holding in portfolio.top_ticker_exposures
+    ]
+)
+exposure_columns = st.columns(2)
+with exposure_columns[0]:
+    st.caption("Category Exposure")
+    st.dataframe(category_df, use_container_width=True)
+with exposure_columns[1]:
+    st.caption("Top 10 Ticker Exposures")
+    st.dataframe(top_ticker_df, use_container_width=True)
 
 df = pd.DataFrame([candidate.__dict__ for candidate in candidates])
 display_columns = {
@@ -113,11 +164,35 @@ display_columns = {
     "recommendation": "Recommendation",
     "suggested_limit_price": "Suggested Limit Price",
     "tier": "Tier",
+    "category": "Category",
+    "own_more_score": "Own More Score",
+    "happy_to_sell_score": "Happy To Sell Score",
+    "max_contracts": "Max Contracts",
+    "profile_notes": "Profile Notes",
+    "preference_adjustment": "Preference Adjustment",
+    "current_ticker_weight": "Current Ticker Weight",
+    "current_category_weight": "Current Category Weight",
+    "post_assignment_ticker_weight": "Post-Assignment Ticker Weight",
+    "post_assignment_category_weight": "Post-Assignment Category Weight",
+    "cash_used_if_assigned": "Cash Used If Assigned",
+    "shares_remaining_if_called_away": "Shares Remaining If Called Away",
+    "portfolio_risk_alerts": "Portfolio Risk Alerts",
+    "portfolio_risk_adjustment": "Portfolio Risk Adjustment",
     "score": "Score",
     "contracts": "Contracts",
 }
 df = df[list(display_columns)].rename(columns=display_columns)
-for percent_column in ["IV Rank", "Est. Assignment Probability", "% OTM", "Weekly Yield", "Annualized Yield"]:
+for percent_column in [
+    "IV Rank",
+    "Est. Assignment Probability",
+    "% OTM",
+    "Weekly Yield",
+    "Annualized Yield",
+    "Current Ticker Weight",
+    "Current Category Weight",
+    "Post-Assignment Ticker Weight",
+    "Post-Assignment Category Weight",
+]:
     df[percent_column] = df[percent_column] * 100
 
 st.subheader("Ranked Trade Candidates")
@@ -130,9 +205,16 @@ st.dataframe(
         "IV Rank": st.column_config.NumberColumn("IV Rank", format="%.2f%%"),
         "Est. Assignment Probability": st.column_config.NumberColumn("Est. Assignment Probability", format="%.2f%%"),
         "Premium Efficiency Score": st.column_config.NumberColumn("Premium Efficiency Score", format="%.4f"),
+        "Preference Adjustment": st.column_config.NumberColumn("Preference Adjustment", format="%.2fx"),
         "% OTM": st.column_config.NumberColumn("% OTM", format="%.2f%%"),
         "Cash Required": st.column_config.NumberColumn("Cash Required", format="$%.2f"),
         "Capital at Risk": st.column_config.NumberColumn("Capital at Risk", format="$%.2f"),
+        "Current Ticker Weight": st.column_config.NumberColumn("Current Ticker Weight", format="%.2f%%"),
+        "Current Category Weight": st.column_config.NumberColumn("Current Category Weight", format="%.2f%%"),
+        "Post-Assignment Ticker Weight": st.column_config.NumberColumn("Post-Assignment Ticker Weight", format="%.2f%%"),
+        "Post-Assignment Category Weight": st.column_config.NumberColumn("Post-Assignment Category Weight", format="%.2f%%"),
+        "Cash Used If Assigned": st.column_config.NumberColumn("Cash Used If Assigned", format="$%.2f"),
+        "Portfolio Risk Adjustment": st.column_config.NumberColumn("Portfolio Risk Adjustment", format="%.2fx"),
     },
 )
 
