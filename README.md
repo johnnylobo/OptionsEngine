@@ -206,6 +206,41 @@ Portfolio risk alerts include:
 
 These alerts adjust scoring so the engine penalizes trades that create excessive ticker/category concentration, use too much cash, or sell too much of a core compounder. Trades that generate premium while keeping concentration balanced can receive a modest boost.
 
+## Executive Dashboard
+
+The first screen after running a scan summarizes the current opportunity set before the full candidate table.
+
+The dashboard shows:
+
+- total portfolio value
+- cash available
+- candidate count
+- Sell recommendation count
+- best covered-call Premium Efficiency Score
+- best cash-secured-put Premium Efficiency Score
+- total premium available from Sell-rated candidates
+- total cash required if all Sell-rated puts are assigned
+
+The Best Opportunities section highlights:
+
+- best covered call
+- best cash-secured put
+- best overall trade
+
+Each opportunity shows the ticker, strategy, expiration, strike, premium, Premium Efficiency Score, estimated assignment probability, assignment outcome, portfolio risk alerts, and a short explanation of why it ranks highly.
+
+The Income Forecast section is a current-screen opportunity view only. It is not historical monthly income, realized income, or a trade journal.
+
+- Conservative: premium from the top 3 Sell-rated candidates.
+- Expected: premium from all Sell-rated candidates.
+- Aggressive: premium from Sell and Maybe candidates.
+
+The Risk Alerts section aggregates portfolio concentration warnings, cash-use warnings, covered-call risks on core compounders, liquidity warnings, wide spread warnings, and earnings warnings when present.
+
+The full ranked candidate table remains below the dashboard and includes filters for strategy, recommendation, ticker search, and minimum Premium Efficiency Score.
+
+The Executive Dashboard is decision support only. It does not place trades, stage orders, log in to brokerages, or store trading history.
+
 ## Output Columns
 
 The ranked table includes ticker, strategy, expiration, strike, current price, bid, ask, mid, delta, IV Rank, estimated assignment probability, Premium Efficiency Score, premium per contract, total premium, shares covered, cash required, capital at risk, assignment outcome, effective entry price, percent out-of-the-money, weekly yield, annualized yield, liquidity warning, earnings warning, recommendation, suggested limit price, tier, category, own more score, happy to sell score, max contracts, profile notes, preference adjustment, current ticker weight, current category weight, post-assignment ticker weight, post-assignment category weight, cash used if assigned, shares remaining if called away, portfolio risk alerts, portfolio risk adjustment, score, and contract count.
