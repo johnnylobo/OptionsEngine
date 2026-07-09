@@ -38,6 +38,25 @@ def test_parse_merrill_style_csv_with_preamble_rows_before_header() -> None:
     ]
 
 
+def test_parse_real_merrill_header_with_quoted_symbol_trailing_space() -> None:
+    csv = StringIO(
+        '"All Accounts","Value","Day\'s Value Change $","Unrealized Gain/Loss $ Chg % Chg"\n'
+        '"Brokerage","$125,000.00","$100.00","$12,000.00 10.60%"\n'
+        "\n"
+        '"Symbol ","Value","Quantity","Price","Day\'s Price $ Chg % Chg","Day\'s Value Change $","Unrealized Gain/Loss $ Chg % Chg","Description"\n'
+        '"TQQQ","$16,800.00","200","$84.00","$1.00 1.20%","$200.00","$8,300.00 97.65%","ProShares UltraPro QQQ"\n'
+        '"NVDA","$20,500.00","125","$164.00","($2.00) -1.20%","($250.00)","$6,250.00 43.85%","NVIDIA Corp"\n'
+        "\n"
+        '"All Accounts","Value","Day\'s Value Change $","Unrealized Gain/Loss $ Chg % Chg"\n'
+        '"Retirement","$50,000.00","$0.00","$5,000.00 11.10%"\n'
+    )
+
+    assert parse_holdings_csv(csv) == [
+        Holding(ticker="TQQQ", shares=200, cost_basis=None, account=None),
+        Holding(ticker="NVDA", shares=125, cost_basis=None, account=None),
+    ]
+
+
 def test_parse_csv_with_blank_rows_before_header() -> None:
     csv = StringIO(
         "\n\n"
