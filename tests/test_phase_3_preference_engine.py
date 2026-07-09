@@ -70,7 +70,7 @@ def test_load_ticker_profiles_from_json(tmp_path) -> None:
     assert profiles["ABC"] == TickerProfile(
         ticker="ABC",
         tier="Tier 1 core compounder",
-        category="Core Compounders",
+        category="Core Compounder",
         own_more_score=5,
         happy_to_sell_score=1,
         max_contracts=2,
@@ -81,10 +81,10 @@ def test_load_ticker_profiles_from_json(tmp_path) -> None:
 def test_default_profiles_include_core_and_thematic_names() -> None:
     profiles = load_ticker_profiles()
 
-    assert profiles["NVDA"].category == "Core Compounders"
+    assert profiles["NVDA"].category == "Core Compounder"
     assert profiles["NVDA"].own_more_score == 5
     assert profiles["NVDA"].happy_to_sell_score == 1
-    assert profiles["RKLB"].category == "Volatility Harvest / Thematic"
+    assert profiles["RKLB"].category == "Space"
 
 
 def test_preference_adjustment_penalizes_low_happy_to_sell_covered_calls() -> None:

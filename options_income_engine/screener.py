@@ -4,6 +4,7 @@ from .holdings import holdings_to_share_map
 from typing import Optional
 
 from .models import Candidate, Holding, TickerProfile, UserConfig
+from .portfolio import build_portfolio_summary, calculate_option_exposure
 from .preferences import get_ticker_profile, load_ticker_profiles
 from .providers import MarketDataProvider
 from .scoring import score_candidate
@@ -31,6 +32,12 @@ def screen_income_candidates(
     covered_call_tickers, put_tickers = select_strategy_universe(holdings, config.watchlist)
     symbols = sorted(covered_call_tickers | put_tickers)
     profiles = profiles if profiles is not None else load_ticker_profiles()
+    portfolio = build_portfolio_summary(
+        holdings=holdings,
+        provider=provider,
+        profiles=profiles,
+        cash_balance=config.available_cash,
+    )
     candidates: list[Candidate] = []
 
     for ticker in symbols:
@@ -53,6 +60,17 @@ def screen_income_candidates(
                         contracts=owned_contracts,
                         config=config,
                         profile=profile,
+                        option_exposure=calculate_option_exposure(
+                            strategy="Covered Call",
+                            ticker=ticker,
+                            category=profile.category,
+                            current_price=snapshot.price,
+                            strike=contract.strike,
+                            contracts=owned_contracts,
+                            owned_shares=share_map.get(ticker, 0),
+                            cash_balance=config.available_cash,
+                            portfolio=portfolio,
+                        ),
                     )
                     if candidate and not candidate.earnings_warning:
                         candidates.append(candidate)
@@ -72,6 +90,17 @@ def screen_income_candidates(
                         contracts=max_contracts,
                         config=config,
                         profile=profile,
+                        option_exposure=calculate_option_exposure(
+                            strategy="Cash-Secured Put",
+                            ticker=ticker,
+                            category=profile.category,
+                            current_price=snapshot.price,
+                            strike=contract.strike,
+                            contracts=max_contracts,
+                            owned_shares=share_map.get(ticker, 0),
+                            cash_balance=config.available_cash,
+                            portfolio=portfolio,
+                        ),
                     )
                     if candidate and not candidate.earnings_warning:
                         candidates.append(candidate)

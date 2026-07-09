@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Any, Optional, Union
 
-from .models import TickerProfile
+from .models import Category, TickerProfile
 from .tiers import get_tier, normalize_ticker
 
 
@@ -32,7 +32,7 @@ def default_ticker_profile(ticker: str) -> TickerProfile:
     return TickerProfile(
         ticker=symbol,
         tier=get_tier(symbol),
-        category="Unprofiled",
+        category="Other",
         own_more_score=3,
         happy_to_sell_score=3,
         max_contracts=None,
@@ -65,7 +65,7 @@ def _parse_profile(raw_profile: Any) -> TickerProfile:
     return TickerProfile(
         ticker=ticker,
         tier=str(raw_profile.get("tier") or get_tier(ticker)),
-        category=str(raw_profile.get("category") or "Uncategorized"),
+        category=_profile_category(str(raw_profile.get("category") or "Other")),
         own_more_score=own_more_score,
         happy_to_sell_score=happy_to_sell_score,
         max_contracts=max_contracts,
@@ -78,3 +78,24 @@ def _score(value: Any, field_name: str, ticker: str) -> int:
     if score < 1 or score > 5:
         raise ValueError(f"{ticker} {field_name} must be between 1 and 5.")
     return score
+
+
+def _profile_category(category: str) -> Category:
+    normalized = category.strip().lower()
+    aliases = {
+        "core compounder": "Core Compounder",
+        "core compounders": "Core Compounder",
+        "semiconductor": "Semiconductor",
+        "semiconductors": "Semiconductor",
+        "ai infrastructure": "AI Infrastructure",
+        "cybersecurity": "Cybersecurity",
+        "crypto infrastructure": "Crypto Infrastructure",
+        "space": "Space",
+        "energy": "Energy",
+        "cash": "Cash",
+        "other": "Other",
+        "volatility harvest / thematic": "Other",
+        "unprofiled": "Other",
+        "uncategorized": "Other",
+    }
+    return aliases.get(normalized, "Other")  # type: ignore[return-value]

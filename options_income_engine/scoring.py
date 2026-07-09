@@ -3,8 +3,9 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-from .models import Candidate, EquitySnapshot, OptionContract, Recommendation, Strategy, TickerProfile, UserConfig
+from .models import Candidate, EquitySnapshot, OptionContract, OptionExposure, Recommendation, Strategy, TickerProfile, UserConfig
 from .preferences import default_ticker_profile
+from .portfolio import neutral_option_exposure, normalize_category
 
 
 def score_candidate(
@@ -15,6 +16,7 @@ def score_candidate(
     contracts: int,
     config: UserConfig,
     profile: Optional[TickerProfile] = None,
+    option_exposure: Optional[OptionExposure] = None,
 ) -> Optional[Candidate]:
     if contract.bid <= 0 or contract.ask <= 0:
         return None
@@ -32,6 +34,8 @@ def score_candidate(
         return None
 
     profile = profile or default_ticker_profile(contract.ticker)
+    profile_category = normalize_category(str(profile.category))
+    option_exposure = option_exposure or neutral_option_exposure()
     mid = round((contract.bid + contract.ask) / 2, 2)
     spread_pct = (contract.ask - contract.bid) / mid if mid > 0 else 1.0
     assignment_probability = abs_delta
@@ -53,7 +57,8 @@ def score_candidate(
         capital_required=capital_at_risk,
     )
     preference_adjustment = _preference_adjustment(strategy, profile)
-    premium_efficiency_score = base_premium_efficiency_score * preference_adjustment
+    portfolio_risk_adjustment = option_exposure.portfolio_risk_adjustment
+    premium_efficiency_score = base_premium_efficiency_score * preference_adjustment * portfolio_risk_adjustment
     percent_otm = (
         (contract.strike - current_price) / current_price
         if strategy == "Covered Call"
@@ -77,7 +82,7 @@ def score_candidate(
         + _spread_score(spread_pct, config.max_spread_pct) * 14
         + _liquidity_score(contract) * 14
         + _tier_score(tier, strategy, weekly_yield, config.min_weekly_yield) * 14
-    ) * preference_adjustment
+    ) * preference_adjustment * portfolio_risk_adjustment
     if earnings_warning:
         base_score -= 80
     if spread_pct > config.max_spread_pct:
@@ -119,12 +124,26 @@ def score_candidate(
         recommendation=recommendation,
         suggested_limit_price=round(max(contract.bid, mid), 2),
         tier=tier,
-        category=profile.category,
+        category=profile_category,
         own_more_score=profile.own_more_score,
         happy_to_sell_score=profile.happy_to_sell_score,
         max_contracts=profile.max_contracts,
         profile_notes=profile.notes,
         preference_adjustment=round(preference_adjustment, 4),
+        current_ticker_exposure=option_exposure.current_ticker_exposure,
+        current_category_exposure=option_exposure.current_category_exposure,
+        current_ticker_weight=option_exposure.current_ticker_weight,
+        current_category_weight=option_exposure.current_category_weight,
+        additional_exposure_if_assigned=option_exposure.additional_exposure_if_assigned,
+        maximum_exposure_after_assignment=option_exposure.maximum_exposure_after_assignment,
+        post_assignment_ticker_weight=option_exposure.post_assignment_ticker_weight,
+        post_assignment_category_weight=option_exposure.post_assignment_category_weight,
+        cash_used_if_assigned=option_exposure.cash_used_if_assigned,
+        shares_remaining_if_called_away=option_exposure.shares_remaining_if_called_away,
+        market_value_at_risk_if_called_away=option_exposure.market_value_at_risk_if_called_away,
+        category_exposure_change_if_assigned=option_exposure.category_exposure_change_if_assigned,
+        portfolio_risk_alerts=option_exposure.portfolio_risk_alerts,
+        portfolio_risk_adjustment=round(option_exposure.portfolio_risk_adjustment, 4),
         score=round(max(base_score, 0), 2),
         contracts=contracts,
     )

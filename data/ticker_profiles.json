@@ -2,7 +2,7 @@
   {
     "ticker": "TQQQ",
     "tier": "Tier 1 core compounder",
-    "category": "Core Compounders",
+    "category": "Core Compounder",
     "own_more_score": 4,
     "happy_to_sell_score": 1,
     "max_contracts": 1,
@@ -11,7 +11,7 @@
   {
     "ticker": "NVDA",
     "tier": "Tier 1 core compounder",
-    "category": "Core Compounders",
+    "category": "Core Compounder",
     "own_more_score": 5,
     "happy_to_sell_score": 1,
     "max_contracts": 1,
@@ -20,7 +20,7 @@
   {
     "ticker": "GOOG",
     "tier": "Tier 1 core compounder",
-    "category": "Core Compounders",
+    "category": "Core Compounder",
     "own_more_score": 4,
     "happy_to_sell_score": 2,
     "max_contracts": 1,
@@ -29,7 +29,7 @@
   {
     "ticker": "AMZN",
     "tier": "Tier 1 core compounder",
-    "category": "Core Compounders",
+    "category": "Core Compounder",
     "own_more_score": 4,
     "happy_to_sell_score": 2,
     "max_contracts": 1,
@@ -38,7 +38,7 @@
   {
     "ticker": "MU",
     "tier": "Tier 2 volatility harvest",
-    "category": "Volatility Harvest / Thematic",
+    "category": "Semiconductor",
     "own_more_score": 3,
     "happy_to_sell_score": 4,
     "max_contracts": 2,
@@ -47,7 +47,7 @@
   {
     "ticker": "AEHR",
     "tier": "Tier 2 volatility harvest",
-    "category": "Volatility Harvest / Thematic",
+    "category": "Semiconductor",
     "own_more_score": 3,
     "happy_to_sell_score": 4,
     "max_contracts": 2,
@@ -56,7 +56,7 @@
   {
     "ticker": "NBIS",
     "tier": "Tier 2 volatility harvest",
-    "category": "Volatility Harvest / Thematic",
+    "category": "AI Infrastructure",
     "own_more_score": 3,
     "happy_to_sell_score": 4,
     "max_contracts": 2,
@@ -65,7 +65,7 @@
   {
     "ticker": "IREN",
     "tier": "Tier 2 volatility harvest",
-    "category": "Volatility Harvest / Thematic",
+    "category": "Crypto Infrastructure",
     "own_more_score": 3,
     "happy_to_sell_score": 4,
     "max_contracts": 2,
@@ -74,7 +74,7 @@
   {
     "ticker": "CRWD",
     "tier": "Tier 2 volatility harvest",
-    "category": "Volatility Harvest / Thematic",
+    "category": "Cybersecurity",
     "own_more_score": 3,
     "happy_to_sell_score": 4,
     "max_contracts": 2,
@@ -83,7 +83,7 @@
   {
     "ticker": "DELL",
     "tier": "Tier 2 volatility harvest",
-    "category": "Volatility Harvest / Thematic",
+    "category": "AI Infrastructure",
     "own_more_score": 3,
     "happy_to_sell_score": 4,
     "max_contracts": 2,
@@ -92,7 +92,7 @@
   {
     "ticker": "AMD",
     "tier": "Tier 2 volatility harvest",
-    "category": "Volatility Harvest / Thematic",
+    "category": "Semiconductor",
     "own_more_score": 4,
     "happy_to_sell_score": 3,
     "max_contracts": 2,
@@ -101,7 +101,7 @@
   {
     "ticker": "SMH",
     "tier": "Tier 2 volatility harvest",
-    "category": "Volatility Harvest / Thematic",
+    "category": "Semiconductor",
     "own_more_score": 4,
     "happy_to_sell_score": 3,
     "max_contracts": 2,
@@ -110,7 +110,7 @@
   {
     "ticker": "SOXL",
     "tier": "Tier 2 volatility harvest",
-    "category": "Volatility Harvest / Thematic",
+    "category": "Semiconductor",
     "own_more_score": 2,
     "happy_to_sell_score": 5,
     "max_contracts": 1,
@@ -119,7 +119,7 @@
   {
     "ticker": "RKLB",
     "tier": "Tier 2 volatility harvest",
-    "category": "Volatility Harvest / Thematic",
+    "category": "Space",
     "own_more_score": 4,
     "happy_to_sell_score": 3,
     "max_contracts": 2,
@@ -128,7 +128,7 @@
   {
     "ticker": "LUNR",
     "tier": "Tier 2 volatility harvest",
-    "category": "Volatility Harvest / Thematic",
+    "category": "Space",
     "own_more_score": 3,
     "happy_to_sell_score": 4,
     "max_contracts": 2,
