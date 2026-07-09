@@ -4,8 +4,6 @@ import csv
 from io import BytesIO, StringIO
 from typing import Optional, Union
 
-import pandas as pd
-
 from .models import Holding
 from .tiers import normalize_ticker
 
@@ -14,20 +12,6 @@ SYMBOL_COLUMNS = ("symbol", "ticker", "security symbol")
 QUANTITY_COLUMNS = ("quantity", "qty", "shares")
 COST_BASIS_COLUMNS = ("cost basis", "costbasis", "total cost basis", "basis")
 ACCOUNT_COLUMNS = ("account", "account name")
-HEADER_HINT_COLUMNS = (
-    "symbol",
-    "ticker",
-    "security symbol",
-    "quantity",
-    "shares",
-    "qty",
-    "last price",
-    "price",
-    "current price",
-    "market value",
-    "description",
-    "security name",
-)
 DEBUG_LINE_COUNT = 20
 
 
@@ -42,72 +26,68 @@ class HoldingsCsvError(ValueError):
         super().__init__(details)
 
 
-def _find_column(columns: list[str], candidates: tuple[str, ...]) -> Optional[str]:
-    lookup = {column.lower().strip(): column for column in columns}
-    for candidate in candidates:
-        if candidate in lookup:
-            return lookup[candidate]
-    return None
-
-
 def parse_holdings_csv(file: Union[BytesIO, StringIO]) -> list[Holding]:
     raw_text = _read_file_text(file)
     preview = _preview_lines(raw_text)
-    header_row = _detect_header_row(raw_text)
+    try:
+        rows = list(csv.reader(StringIO(raw_text)))
+    except csv.Error as exc:
+        raise _friendly_error(preview, str(exc)) from exc
+
+    header_row = _detect_header_row(rows)
     if header_row is None:
         raise _friendly_error(preview)
 
-    try:
-        df = pd.read_csv(
-            StringIO(raw_text),
-            skiprows=header_row,
-            engine="python",
-            skip_blank_lines=True,
-            on_bad_lines="error",
-        )
-    except Exception as exc:
-        raise _friendly_error(preview, str(exc)) from exc
-
-    if df.empty:
-        return []
-
-    columns = list(df.columns)
-    symbol_col = _find_column(columns, SYMBOL_COLUMNS)
-    quantity_col = _find_column(columns, QUANTITY_COLUMNS)
-    cost_col = _find_column(columns, COST_BASIS_COLUMNS)
-    account_col = _find_column(columns, ACCOUNT_COLUMNS)
+    header = [_normalize_column(cell) for cell in rows[header_row]]
+    symbol_col = _find_column_index(header, SYMBOL_COLUMNS)
+    quantity_col = _find_column_index(header, QUANTITY_COLUMNS)
+    cost_col = _find_column_index(header, COST_BASIS_COLUMNS)
+    account_col = _find_column_index(header, ACCOUNT_COLUMNS)
 
     if symbol_col is None or quantity_col is None:
         raise _friendly_error(preview)
 
     holdings: list[Holding] = []
-    for _, row in df.iterrows():
-        raw_symbol = row.get(symbol_col)
-        if pd.isna(raw_symbol):
+    for row in rows[header_row + 1 :]:
+        normalized_row = [_normalize_column(cell) for cell in row]
+        if _is_blank_row(normalized_row):
             continue
-        ticker = normalize_ticker(str(raw_symbol))
+        if _looks_like_holdings_header(normalized_row):
+            continue
+        if _is_account_summary_row(row, symbol_col, quantity_col, len(header)):
+            continue
+
+        raw_symbol = _cell(row, symbol_col)
+        ticker = normalize_ticker(raw_symbol)
         if not ticker or ticker in {"CASH", "MMDA", "SPAXX"}:
             continue
 
+        raw_quantity = _cell(row, quantity_col)
+        if not raw_quantity.strip():
+            continue
         try:
-            shares = int(float(_clean_number(row.get(quantity_col, 0))))
+            shares = int(float(_clean_number(raw_quantity)))
         except (TypeError, ValueError) as exc:
             raise HoldingsCsvError(
                 f"Could not parse shares for ticker {ticker!r}. Please check the Quantity/Shares column.",
                 preview,
             ) from exc
+
         cost_basis = None
-        if cost_col is not None and not pd.isna(row.get(cost_col)):
+        if cost_col is not None:
+            raw_cost_basis = _cell(row, cost_col)
             try:
-                cost_basis = float(_clean_number(row.get(cost_col)))
+                cost_basis = float(_clean_number(raw_cost_basis)) if raw_cost_basis.strip() else None
             except (TypeError, ValueError) as exc:
                 raise HoldingsCsvError(
                     f"Could not parse cost basis for ticker {ticker!r}. Please check the Cost Basis column.",
                     preview,
                 ) from exc
+
         account = None
-        if account_col is not None and not pd.isna(row.get(account_col)):
-            account = str(row.get(account_col))
+        if account_col is not None:
+            raw_account = _cell(row, account_col)
+            account = raw_account if raw_account.strip() else None
 
         holdings.append(Holding(ticker=ticker, shares=shares, cost_basis=cost_basis, account=account))
 
@@ -128,14 +108,9 @@ def _read_file_text(file: Union[BytesIO, StringIO]) -> str:
     return str(raw)
 
 
-def _detect_header_row(raw_text: str, max_rows: int = 50) -> Optional[int]:
-    sample = raw_text.splitlines()[:max_rows]
-    for index, line in enumerate(sample):
-        if not line.strip():
-            continue
-        try:
-            row = next(csv.reader([line]))
-        except csv.Error:
+def _detect_header_row(rows: list[list[str]], max_rows: int = 50) -> Optional[int]:
+    for index, row in enumerate(rows[:max_rows]):
+        if _is_blank_row([_normalize_column(cell) for cell in row]):
             continue
         normalized = [_normalize_column(cell) for cell in row]
         if _looks_like_holdings_header(normalized):
@@ -146,16 +121,50 @@ def _detect_header_row(raw_text: str, max_rows: int = 50) -> Optional[int]:
 def _looks_like_holdings_header(columns: list[str]) -> bool:
     has_symbol = any(column in SYMBOL_COLUMNS for column in columns)
     has_quantity = any(column in QUANTITY_COLUMNS for column in columns)
-    hint_count = sum(1 for column in columns if column in HEADER_HINT_COLUMNS)
-    return has_symbol and has_quantity and hint_count >= 2
+    return has_symbol and has_quantity
 
 
 def _normalize_column(value: object) -> str:
-    return str(value).strip().lower()
+    text = str(value).replace("\ufeff", "")
+    text = text.strip().strip('"').strip("'").strip()
+    return " ".join(text.lower().split())
 
 
 def _clean_number(value: object) -> str:
-    return str(value).replace("$", "").replace(",", "").strip()
+    text = str(value).replace("\ufeff", "").strip().strip('"').strip("'").strip()
+    is_parenthesized = text.startswith("(") and text.endswith(")")
+    text = text.strip("()")
+    text = text.replace("$", "").replace(",", "").replace("%", "").strip()
+    return f"-{text}" if is_parenthesized and text else text
+
+
+def _find_column_index(columns: list[str], candidates: tuple[str, ...]) -> Optional[int]:
+    for index, column in enumerate(columns):
+        if column in candidates:
+            return index
+    return None
+
+
+def _cell(row: list[str], index: int) -> str:
+    if index >= len(row):
+        return ""
+    return str(row[index]).strip()
+
+
+def _is_blank_row(row: list[str]) -> bool:
+    return all(not cell.strip() for cell in row)
+
+
+def _is_account_summary_row(row: list[str], symbol_col: int, quantity_col: int, header_len: int) -> bool:
+    symbol = _normalize_column(_cell(row, symbol_col))
+    if symbol in {"all accounts", "account", "account total", "total", "totals"}:
+        return True
+    if symbol.endswith(" accounts") or symbol.endswith(" account"):
+        return True
+    raw_quantity = _cell(row, quantity_col)
+    if len(row) < header_len and any(marker in raw_quantity for marker in ("$", "%")):
+        return True
+    return False
 
 
 def _preview_lines(raw_text: str, line_count: int = DEBUG_LINE_COUNT) -> str:
