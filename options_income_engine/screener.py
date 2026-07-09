@@ -66,7 +66,7 @@ def screen_income_candidates(
                     if candidate and not candidate.earnings_warning:
                         candidates.append(candidate)
 
-    candidates.sort(key=lambda item: (item.recommendation == "Sell", item.score), reverse=True)
+    candidates.sort(key=lambda item: item.premium_efficiency_score, reverse=True)
     ranked: list[Candidate] = []
     for index, candidate in enumerate(candidates, start=1):
         ranked.append(candidate.__class__(**{**candidate.__dict__, "rank": index}))

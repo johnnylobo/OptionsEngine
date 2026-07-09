@@ -95,7 +95,9 @@ display_columns = {
     "ask": "Ask",
     "mid": "Mid",
     "delta": "Delta",
+    "iv_rank": "IV Rank",
     "assignment_probability": "Est. Assignment Probability",
+    "premium_efficiency_score": "Premium Efficiency Score",
     "premium_per_contract": "Premium / Contract",
     "total_premium": "Total Premium",
     "shares_covered": "Shares Covered",
@@ -115,7 +117,7 @@ display_columns = {
     "contracts": "Contracts",
 }
 df = df[list(display_columns)].rename(columns=display_columns)
-for percent_column in ["Est. Assignment Probability", "% OTM", "Weekly Yield", "Annualized Yield"]:
+for percent_column in ["IV Rank", "Est. Assignment Probability", "% OTM", "Weekly Yield", "Annualized Yield"]:
     df[percent_column] = df[percent_column] * 100
 
 st.subheader("Ranked Trade Candidates")
@@ -125,7 +127,9 @@ st.dataframe(
     column_config={
         "Weekly Yield": st.column_config.ProgressColumn("Weekly Yield", format="%.2f%%", min_value=0, max_value=2.0),
         "Annualized Yield": st.column_config.NumberColumn("Annualized Yield", format="%.2f%%"),
+        "IV Rank": st.column_config.NumberColumn("IV Rank", format="%.2f%%"),
         "Est. Assignment Probability": st.column_config.NumberColumn("Est. Assignment Probability", format="%.2f%%"),
+        "Premium Efficiency Score": st.column_config.NumberColumn("Premium Efficiency Score", format="%.4f"),
         "% OTM": st.column_config.NumberColumn("% OTM", format="%.2f%%"),
         "Cash Required": st.column_config.NumberColumn("Cash Required", format="$%.2f"),
         "Capital at Risk": st.column_config.NumberColumn("Capital at Risk", format="$%.2f"),

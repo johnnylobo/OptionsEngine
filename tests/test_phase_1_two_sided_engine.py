@@ -33,6 +33,7 @@ class StaticProvider(MarketDataProvider):
                 bid=1.0,
                 ask=1.1,
                 delta=0.07,
+                iv_rank=0.50,
                 volume=100,
                 open_interest=500,
             ),
@@ -44,6 +45,7 @@ class StaticProvider(MarketDataProvider):
                 bid=1.0,
                 ask=1.1,
                 delta=-0.07,
+                iv_rank=0.50,
                 volume=100,
                 open_interest=500,
             ),
@@ -117,6 +119,7 @@ def test_basic_scoring_output_has_clear_strategy_risk_fields() -> None:
         bid=1.0,
         ask=1.1,
         delta=0.07,
+        iv_rank=0.50,
         volume=100,
         open_interest=500,
     )
@@ -128,6 +131,7 @@ def test_basic_scoring_output_has_clear_strategy_risk_fields() -> None:
         bid=1.0,
         ask=1.1,
         delta=-0.07,
+        iv_rank=0.60,
         volume=100,
         open_interest=500,
     )
@@ -136,14 +140,66 @@ def test_basic_scoring_output_has_clear_strategy_risk_fields() -> None:
     put_candidate = score_candidate(contract=put, strategy="Cash-Secured Put", snapshot=snapshot, contracts=2, config=config)
 
     assert call_candidate is not None
+    assert call_candidate.iv_rank == 0.50
+    assert call_candidate.premium_efficiency_score == 0.075
     assert call_candidate.shares_covered == 100
     assert call_candidate.cash_required == 0
     assert call_candidate.capital_at_risk == 10_000
     assert call_candidate.assignment_outcome == "May sell 100 shares at $105.00 strike."
 
     assert put_candidate is not None
+    assert put_candidate.iv_rank == 0.60
+    assert put_candidate.premium_efficiency_score == 0.094737
     assert put_candidate.shares_covered == 0
     assert put_candidate.cash_required == 19_000
     assert put_candidate.capital_at_risk == 19_000
     assert put_candidate.effective_entry_price == 93.95
     assert put_candidate.assignment_outcome == "May buy 200 shares at $95.00 strike; effective entry $93.95."
+
+
+def test_premium_efficiency_is_master_ranking() -> None:
+    class RankingProvider(StaticProvider):
+        def get_equity_snapshot(self, ticker: str) -> EquitySnapshot:
+            prices = {
+                "AAA": 100.0,
+                "CCC": 25.0,
+            }
+            return EquitySnapshot(ticker=ticker, price=prices[ticker])
+
+        def get_options_chain(self, ticker: str, expiration: date) -> list[OptionContract]:
+            if ticker == "AAA":
+                return [
+                    OptionContract(
+                        ticker=ticker,
+                        expiration=expiration,
+                        option_type="put",
+                        strike=95.0,
+                        bid=2.0,
+                        ask=2.2,
+                        delta=-0.10,
+                        iv_rank=0.20,
+                        volume=100,
+                        open_interest=500,
+                    )
+                ]
+            return [
+                OptionContract(
+                    ticker=ticker,
+                    expiration=expiration,
+                    option_type="put",
+                    strike=23.75,
+                    bid=0.8,
+                    ask=0.9,
+                    delta=-0.05,
+                    iv_rank=0.80,
+                    volume=100,
+                    open_interest=500,
+                )
+            ]
+
+    config = UserConfig(available_cash=10_000, expirations=[EXPIRATION], watchlist=["AAA", "CCC"])
+
+    candidates = screen_income_candidates(holdings=[], config=config, provider=RankingProvider())
+
+    assert [candidate.ticker for candidate in candidates] == ["CCC", "AAA"]
+    assert candidates[0].premium_efficiency_score > candidates[1].premium_efficiency_score
