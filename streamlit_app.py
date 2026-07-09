@@ -98,7 +98,10 @@ display_columns = {
     "assignment_probability": "Est. Assignment Probability",
     "premium_per_contract": "Premium / Contract",
     "total_premium": "Total Premium",
-    "capital_or_shares": "Capital at Risk / Shares Covered",
+    "shares_covered": "Shares Covered",
+    "cash_required": "Cash Required",
+    "capital_at_risk": "Capital at Risk",
+    "assignment_outcome": "Assignment Outcome",
     "effective_entry_price": "Effective Entry Price",
     "percent_otm": "% OTM",
     "weekly_yield": "Weekly Yield",
@@ -124,6 +127,8 @@ st.dataframe(
         "Annualized Yield": st.column_config.NumberColumn("Annualized Yield", format="%.2f%%"),
         "Est. Assignment Probability": st.column_config.NumberColumn("Est. Assignment Probability", format="%.2f%%"),
         "% OTM": st.column_config.NumberColumn("% OTM", format="%.2f%%"),
+        "Cash Required": st.column_config.NumberColumn("Cash Required", format="$%.2f"),
+        "Capital at Risk": st.column_config.NumberColumn("Capital at Risk", format="$%.2f"),
     },
 )
 

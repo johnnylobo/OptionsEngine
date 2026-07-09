@@ -64,7 +64,10 @@ class Candidate:
     assignment_probability: float
     premium_per_contract: float
     total_premium: float
-    capital_or_shares: float
+    shares_covered: int
+    cash_required: float
+    capital_at_risk: float
+    assignment_outcome: str
     effective_entry_price: Optional[float]
     percent_otm: float
     weekly_yield: float
