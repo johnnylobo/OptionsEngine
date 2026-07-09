@@ -35,8 +35,13 @@ def score_candidate(
     assignment_probability = abs_delta
     premium_per_contract = mid * 100
     total_premium = premium_per_contract * contracts
-    capital = contracts * 100 * (current_price if strategy == "Covered Call" else contract.strike)
-    weekly_yield = total_premium / capital if capital > 0 else 0
+    shares = contracts * 100
+    cash_required = round(contract.strike * shares, 2) if strategy == "Cash-Secured Put" else 0.0
+    capital_at_risk = round(
+        shares * (current_price if strategy == "Covered Call" else contract.strike),
+        2,
+    )
+    weekly_yield = total_premium / capital_at_risk if capital_at_risk > 0 else 0
     annualized_yield = weekly_yield * 52
     percent_otm = (
         (contract.strike - current_price) / current_price
@@ -44,6 +49,12 @@ def score_candidate(
         else (current_price - contract.strike) / current_price
     )
     effective_entry_price = round(contract.strike - mid, 2) if strategy == "Cash-Secured Put" else None
+    assignment_outcome = _assignment_outcome(
+        strategy=strategy,
+        shares=shares,
+        strike=contract.strike,
+        effective_entry_price=effective_entry_price,
+    )
     earnings_warning = _earnings_warning(snapshot.next_earnings_date, contract.expiration)
     liquidity_warning = _liquidity_warning(contract, spread_pct, config.max_spread_pct)
     tier = get_tier(contract.ticker)
@@ -82,7 +93,10 @@ def score_candidate(
         assignment_probability=round(assignment_probability, 4),
         premium_per_contract=round(premium_per_contract, 2),
         total_premium=round(total_premium, 2),
-        capital_or_shares=contracts * 100 if strategy == "Covered Call" else round(capital, 2),
+        shares_covered=shares if strategy == "Covered Call" else 0,
+        cash_required=cash_required,
+        capital_at_risk=capital_at_risk,
+        assignment_outcome=assignment_outcome,
         effective_entry_price=effective_entry_price,
         percent_otm=round(percent_otm, 4),
         weekly_yield=round(weekly_yield, 4),
@@ -95,6 +109,18 @@ def score_candidate(
         score=round(max(base_score, 0), 2),
         contracts=contracts,
     )
+
+
+def _assignment_outcome(
+    *,
+    strategy: Strategy,
+    shares: int,
+    strike: float,
+    effective_entry_price: Optional[float],
+) -> str:
+    if strategy == "Covered Call":
+        return f"May sell {shares} shares at ${strike:.2f} strike."
+    return f"May buy {shares} shares at ${strike:.2f} strike; effective entry ${effective_entry_price:.2f}."
 
 
 def _earnings_warning(next_earnings: Optional[date], expiration: date) -> str:

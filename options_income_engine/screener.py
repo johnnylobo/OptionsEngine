@@ -7,6 +7,16 @@ from .scoring import score_candidate
 from .tiers import normalize_ticker
 
 
+def select_strategy_universe(
+    holdings: list[Holding],
+    watchlist: list[str],
+) -> tuple[set[str], set[str]]:
+    share_map = holdings_to_share_map(holdings)
+    covered_call_tickers = {ticker for ticker, shares in share_map.items() if shares >= 100}
+    put_tickers = set(share_map) | {normalize_ticker(ticker) for ticker in watchlist if ticker.strip()}
+    return covered_call_tickers, put_tickers
+
+
 def screen_income_candidates(
     *,
     holdings: list[Holding],
@@ -14,7 +24,8 @@ def screen_income_candidates(
     provider: MarketDataProvider,
 ) -> list[Candidate]:
     share_map = holdings_to_share_map(holdings)
-    symbols = sorted(set(share_map) | {normalize_ticker(t) for t in config.watchlist if t.strip()})
+    covered_call_tickers, put_tickers = select_strategy_universe(holdings, config.watchlist)
+    symbols = sorted(covered_call_tickers | put_tickers)
     candidates: list[Candidate] = []
 
     for ticker in symbols:
@@ -24,7 +35,7 @@ def screen_income_candidates(
         for expiration in config.expirations:
             chain = provider.get_options_chain(ticker, expiration)
 
-            if owned_contracts > 0:
+            if ticker in covered_call_tickers and owned_contracts > 0:
                 for contract in chain:
                     if contract.option_type != "call":
                         continue
@@ -38,7 +49,7 @@ def screen_income_candidates(
                     if candidate and not candidate.earnings_warning:
                         candidates.append(candidate)
 
-            if ticker in {normalize_ticker(t) for t in config.watchlist}:
+            if ticker in put_tickers:
                 for contract in chain:
                     if contract.option_type != "put":
                         continue

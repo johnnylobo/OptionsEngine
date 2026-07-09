@@ -1,12 +1,18 @@
 # Options Income Engine
 
-A local Streamlit app that screens a Merrill holdings CSV and an approved watchlist for weekly covered calls and cash-secured puts. It ranks candidate trades only; it never submits orders.
+A local Streamlit app that screens a manually uploaded Merrill holdings CSV and an approved watchlist for both sides of an options income strategy:
+
+- Covered calls on shares already owned.
+- Cash-secured puts on names already owned or additionally approved.
+
+It ranks candidate trades only; it never submits orders or connects to Merrill for execution.
 
 ## Safety Boundaries
 
 - No auto-trading.
 - No broker login scraping.
 - No brokerage credential storage.
+- Merrill holdings are uploaded manually, and any trade execution remains manual.
 - API keys live only in `.env`.
 - Earnings-before-expiration trades are rejected.
 - Wide spreads, low volume, low open interest, and assignment risk are surfaced clearly.
@@ -86,16 +92,19 @@ Rule: calls and puts can rank well when risk/reward, liquidity, and spread quali
 
 Covered calls:
 
+- Scans only tickers where the holdings CSV shows at least 100 owned shares.
 - Requires at least 100 owned shares per contract.
 - Uses calls above current price.
 - Uses delta as an assignment probability proxy.
+- Assignment outcome is shown as shares that may be sold at the strike.
 
 Cash-secured puts:
 
-- Uses approved watchlist tickers only.
+- Scans every ticker already owned plus additional approved watchlist tickers.
 - Assignment obligation must be less than or equal to available cash.
 - Uses puts below current price.
 - Shows effective entry price as strike minus midpoint premium.
+- Assignment outcome is shown as shares that may be purchased at the strike and the effective entry after premium.
 
 Filters:
 
@@ -106,7 +115,7 @@ Filters:
 
 ## Output Columns
 
-The ranked table includes ticker, strategy, expiration, strike, current price, bid, ask, mid, delta, estimated assignment probability, premium per contract, total premium, capital at risk or shares covered, effective entry price, percent out-of-the-money, weekly yield, annualized yield, liquidity warning, earnings warning, recommendation, suggested limit price, tier, score, and contract count.
+The ranked table includes ticker, strategy, expiration, strike, current price, bid, ask, mid, delta, estimated assignment probability, premium per contract, total premium, shares covered, cash required, capital at risk, assignment outcome, effective entry price, percent out-of-the-money, weekly yield, annualized yield, liquidity warning, earnings warning, recommendation, suggested limit price, tier, score, and contract count.
 
 ## Data Providers
 
