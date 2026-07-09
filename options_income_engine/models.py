@@ -44,6 +44,7 @@ class OptionContract:
     bid: float
     ask: float
     delta: Optional[float]
+    iv_rank: Optional[float] = None
     volume: Optional[int] = None
     open_interest: Optional[int] = None
     symbol: Optional[str] = None
@@ -61,7 +62,9 @@ class Candidate:
     ask: float
     mid: float
     delta: float
+    iv_rank: float
     assignment_probability: float
+    premium_efficiency_score: float
     premium_per_contract: float
     total_premium: float
     shares_covered: int

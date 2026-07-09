@@ -33,6 +33,7 @@ def score_candidate(
     mid = round((contract.bid + contract.ask) / 2, 2)
     spread_pct = (contract.ask - contract.bid) / mid if mid > 0 else 1.0
     assignment_probability = abs_delta
+    iv_rank = _normalized_iv_rank(contract.iv_rank)
     premium_per_contract = mid * 100
     total_premium = premium_per_contract * contracts
     shares = contracts * 100
@@ -43,6 +44,12 @@ def score_candidate(
     )
     weekly_yield = total_premium / capital_at_risk if capital_at_risk > 0 else 0
     annualized_yield = weekly_yield * 52
+    premium_efficiency_score = _premium_efficiency_score(
+        total_premium=total_premium,
+        iv_rank=iv_rank,
+        assignment_probability=assignment_probability,
+        capital_required=capital_at_risk,
+    )
     percent_otm = (
         (contract.strike - current_price) / current_price
         if strategy == "Covered Call"
@@ -90,7 +97,9 @@ def score_candidate(
         ask=round(contract.ask, 2),
         mid=mid,
         delta=round(contract.delta, 4),
+        iv_rank=round(iv_rank, 4),
         assignment_probability=round(assignment_probability, 4),
+        premium_efficiency_score=round(premium_efficiency_score, 6),
         premium_per_contract=round(premium_per_contract, 2),
         total_premium=round(total_premium, 2),
         shares_covered=shares if strategy == "Covered Call" else 0,
@@ -109,6 +118,26 @@ def score_candidate(
         score=round(max(base_score, 0), 2),
         contracts=contracts,
     )
+
+
+def _normalized_iv_rank(iv_rank: Optional[float]) -> float:
+    if iv_rank is None:
+        return 1.0
+    if iv_rank > 1:
+        iv_rank = iv_rank / 100
+    return max(0.0, min(iv_rank, 1.0))
+
+
+def _premium_efficiency_score(
+    *,
+    total_premium: float,
+    iv_rank: float,
+    assignment_probability: float,
+    capital_required: float,
+) -> float:
+    probability = max(assignment_probability, 0.0001)
+    capital = max(capital_required, 0.01)
+    return (total_premium * iv_rank) / probability / capital
 
 
 def _assignment_outcome(

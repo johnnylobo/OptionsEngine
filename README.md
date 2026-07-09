@@ -113,9 +113,15 @@ Filters:
 - Maximum bid/ask spread defaults to `25%`.
 - Earnings before expiration are rejected.
 
+Ranking:
+
+- Candidates are ranked by Premium Efficiency Score.
+- Premium Efficiency Score = premium collected x IV Rank / assignment probability / capital required.
+- If a provider does not supply IV Rank, the engine uses a neutral `1.0` value so candidates can still be ranked.
+
 ## Output Columns
 
-The ranked table includes ticker, strategy, expiration, strike, current price, bid, ask, mid, delta, estimated assignment probability, premium per contract, total premium, shares covered, cash required, capital at risk, assignment outcome, effective entry price, percent out-of-the-money, weekly yield, annualized yield, liquidity warning, earnings warning, recommendation, suggested limit price, tier, score, and contract count.
+The ranked table includes ticker, strategy, expiration, strike, current price, bid, ask, mid, delta, IV Rank, estimated assignment probability, Premium Efficiency Score, premium per contract, total premium, shares covered, cash required, capital at risk, assignment outcome, effective entry price, percent out-of-the-money, weekly yield, annualized yield, liquidity warning, earnings warning, recommendation, suggested limit price, tier, score, and contract count.
 
 ## Data Providers
 

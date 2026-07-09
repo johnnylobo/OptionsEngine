@@ -137,6 +137,12 @@ class TradierProvider(MarketDataProvider):
                     bid=float(bid),
                     ask=float(ask),
                     delta=_optional_float(greeks.get("delta")),
+                    iv_rank=_optional_iv_rank(
+                        option.get("iv_rank")
+                        or option.get("ivRank")
+                        or greeks.get("iv_rank")
+                        or greeks.get("ivRank")
+                    ),
                     volume=_optional_int(option.get("volume")),
                     open_interest=_optional_int(option.get("open_interest")),
                     symbol=option.get("symbol"),
@@ -179,6 +185,7 @@ class MockProvider(MarketDataProvider):
                     bid=bid,
                     ask=round(bid * 1.12, 2),
                     delta=delta,
+                    iv_rank=0.55,
                     volume=120,
                     open_interest=850,
                 )
@@ -192,6 +199,7 @@ class MockProvider(MarketDataProvider):
                     bid=bid,
                     ask=round(bid * 1.14, 2),
                     delta=-delta,
+                    iv_rank=0.60,
                     volume=95,
                     open_interest=640,
                 )
@@ -228,6 +236,15 @@ def _optional_float(value: Any) -> Optional[float]:
     if value in (None, ""):
         return None
     return float(value)
+
+
+def _optional_iv_rank(value: Any) -> Optional[float]:
+    parsed = _optional_float(value)
+    if parsed is None:
+        return None
+    if parsed > 1:
+        parsed = parsed / 100
+    return max(0.0, min(parsed, 1.0))
 
 
 def _optional_int(value: Any) -> Optional[int]:
