@@ -7,9 +7,11 @@ import pytest
 from options_income_engine.holdings import (
     HoldingsCsvError,
     ManualHoldingsMapping,
+    detect_holdings_mapping,
     parse_holdings_csv,
     parse_holdings_from_mapping,
     read_holdings_csv_rows,
+    summarize_holdings_import,
 )
 from options_income_engine.models import Holding
 
@@ -77,6 +79,36 @@ def test_parse_merrill_header_and_comma_quantity_from_acceptance_sample() -> Non
         Holding(ticker="ABCL", shares=12100, cost_basis=None, account=None),
         Holding(ticker="AMD", shares=338, cost_basis=None, account=None),
     ]
+
+
+def test_real_merrill_sample_auto_parses_holdings_and_summary() -> None:
+    csv = StringIO(
+        '"All Accounts","Value","Day\'s Value Change $","Unrealized Gain/Loss $ Chg % Chg"\n'
+        '"All Accounts","$205,759.84","$0.00","$15,000.00 7.86%"\n'
+        '"Individual Account","$100,000.00","$0.00","$5,000.00 5.00%"\n'
+        "\n"
+        '"Symbol  ","Value","Quantity","Price","Day\'s Price $ Chg % Chg","Day\'s Value Change $","Unrealized Gain/Loss $ Chg % Chg","Description"\n'
+        '"ABBV","$16,509.35","65","$253.99","$1.00 0.40%","$65.00","$5,000.00 43.45%","AbbVie Inc"\n'
+        '"ABCL","$15,288.00","12,100","$7.28","$0.10 1.39%","$1,210.00","$2,000.00 15.05%","AbCellera Biologics"\n'
+        '"AMD","$173,961.84","338","$514.68","$2.00 0.39%","$676.00","$10,000.00 6.10%","Advanced Micro Devices"\n'
+        "\n"
+        '"Symbol  ","Value","Quantity","Price","Day\'s Price $ Chg % Chg","Day\'s Value Change $","Unrealized Gain/Loss $ Chg % Chg","Description"\n'
+        '"IRA","$10,000.00","$0.00","$0.00","","","","Account summary row"\n'
+        '"All Accounts","Value","Quantity","Price","Day\'s Price $ Chg % Chg","Day\'s Value Change $","Unrealized Gain/Loss $ Chg % Chg","Description"\n'
+    )
+    rows = read_holdings_csv_rows(csv)
+
+    holdings = parse_holdings_csv(csv)
+    mapping = detect_holdings_mapping(rows)
+    summary = summarize_holdings_import(holdings, rows, mapping)
+
+    assert holdings == [
+        Holding(ticker="ABBV", shares=65, cost_basis=None, account=None),
+        Holding(ticker="ABCL", shares=12100, cost_basis=None, account=None),
+        Holding(ticker="AMD", shares=338, cost_basis=None, account=None),
+    ]
+    assert summary.total_market_value == pytest.approx(205759.19)
+    assert summary.tickers_with_100_shares == 2
 
 
 def test_manual_header_row_mapping_parses_merrill_rows() -> None:

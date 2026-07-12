@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import re
 from dataclasses import dataclass
 from io import BytesIO, StringIO
 from typing import Optional, Union
@@ -13,6 +14,7 @@ SYMBOL_COLUMNS = ("symbol", "ticker", "security symbol")
 QUANTITY_COLUMNS = ("quantity", "qty", "shares")
 COST_BASIS_COLUMNS = ("cost basis", "costbasis", "total cost basis", "basis")
 ACCOUNT_COLUMNS = ("account", "account name")
+MARKET_VALUE_COLUMNS = ("value", "market value", "current value")
 DEBUG_LINE_COUNT = 20
 
 
@@ -43,6 +45,12 @@ class ManualHoldingsParseResult:
     warnings: list[str]
 
 
+@dataclass(frozen=True)
+class HoldingsImportSummary:
+    total_market_value: Optional[float]
+    tickers_with_100_shares: int
+
+
 def parse_holdings_csv(file: Union[BytesIO, StringIO]) -> list[Holding]:
     raw_text = _read_file_text(file)
     preview = _preview_lines(raw_text)
@@ -51,35 +59,32 @@ def parse_holdings_csv(file: Union[BytesIO, StringIO]) -> list[Holding]:
     except csv.Error as exc:
         raise _friendly_error(preview, str(exc)) from exc
 
-    header_row = _detect_header_row(rows)
-    if header_row is None:
+    mapping = detect_holdings_mapping(rows)
+    if mapping is None:
         raise _friendly_error(preview)
 
-    header = [_normalize_column(cell) for cell in rows[header_row]]
-    symbol_col = _find_column_index(header, SYMBOL_COLUMNS)
-    quantity_col = _find_column_index(header, QUANTITY_COLUMNS)
+    header = [_normalize_column(cell) for cell in rows[mapping.header_row]]
     cost_col = _find_column_index(header, COST_BASIS_COLUMNS)
     account_col = _find_column_index(header, ACCOUNT_COLUMNS)
 
-    if symbol_col is None or quantity_col is None:
-        raise _friendly_error(preview)
-
     holdings: list[Holding] = []
-    for row in rows[header_row + 1 :]:
+    for row in rows[mapping.header_row + 1 :]:
         normalized_row = [_normalize_column(cell) for cell in row]
         if _is_blank_row(normalized_row):
             continue
         if _looks_like_holdings_header(normalized_row):
             continue
-        if _is_account_summary_row(row, symbol_col, quantity_col, len(header)):
+        if _is_account_summary_row(row, mapping.symbol_col, mapping.quantity_col, len(header)):
             continue
 
-        raw_symbol = _cell(row, symbol_col)
+        raw_symbol = _cell(row, mapping.symbol_col)
         ticker = normalize_ticker(raw_symbol)
         if not ticker or ticker in {"CASH", "MMDA", "SPAXX"}:
             continue
+        if not _is_probable_ticker(ticker):
+            continue
 
-        raw_quantity = _cell(row, quantity_col)
+        raw_quantity = _cell(row, mapping.quantity_col)
         if not raw_quantity.strip():
             continue
         try:
@@ -108,6 +113,9 @@ def parse_holdings_csv(file: Union[BytesIO, StringIO]) -> list[Holding]:
 
         holdings.append(Holding(ticker=ticker, shares=shares, cost_basis=cost_basis, account=account))
 
+    if not holdings:
+        raise _friendly_error(preview)
+
     return holdings
 
 
@@ -118,6 +126,26 @@ def read_holdings_csv_rows(file: Union[BytesIO, StringIO]) -> list[list[str]]:
         return list(csv.reader(StringIO(raw_text)))
     except csv.Error as exc:
         raise _friendly_error(preview, str(exc)) from exc
+
+
+def detect_holdings_mapping(rows: list[list[str]]) -> Optional[ManualHoldingsMapping]:
+    header_row = _detect_header_row(rows)
+    if header_row is None:
+        return None
+
+    header = [_normalize_column(cell) for cell in rows[header_row]]
+    symbol_col = _find_column_index(header, SYMBOL_COLUMNS)
+    quantity_col = _find_column_index(header, QUANTITY_COLUMNS)
+    if symbol_col is None or quantity_col is None:
+        return None
+
+    return ManualHoldingsMapping(
+        header_row=header_row,
+        symbol_col=symbol_col,
+        quantity_col=quantity_col,
+        market_value_col=_find_column_index(header, MARKET_VALUE_COLUMNS),
+        description_col=_find_column_index(header, ("description", "security name")),
+    )
 
 
 def normalize_header(value: object) -> str:
@@ -149,6 +177,8 @@ def parse_holdings_from_mapping(
         ticker = normalize_ticker(raw_symbol)
         if not ticker or ticker in {"CASH", "MMDA", "SPAXX"}:
             continue
+        if not _is_probable_ticker(ticker):
+            continue
 
         raw_quantity = _cell(row, mapping.quantity_col)
         if not raw_quantity.strip():
@@ -162,6 +192,21 @@ def parse_holdings_from_mapping(
         holdings.append(Holding(ticker=ticker, shares=shares, cost_basis=None, account=None))
 
     return ManualHoldingsParseResult(holdings=holdings, warnings=warnings)
+
+
+def summarize_holdings_import(
+    holdings: list[Holding],
+    rows: Optional[list[list[str]]] = None,
+    mapping: Optional[ManualHoldingsMapping] = None,
+) -> HoldingsImportSummary:
+    total_market_value = None
+    if rows is not None and mapping is not None and mapping.market_value_col is not None:
+        total_market_value = _sum_market_values(rows, mapping)
+    shares_by_ticker = holdings_to_share_map(holdings)
+    return HoldingsImportSummary(
+        total_market_value=total_market_value,
+        tickers_with_100_shares=sum(1 for shares in shares_by_ticker.values() if shares >= 100),
+    )
 
 
 def _read_file_text(file: Union[BytesIO, StringIO]) -> str:
@@ -178,7 +223,7 @@ def _read_file_text(file: Union[BytesIO, StringIO]) -> str:
     return str(raw)
 
 
-def _detect_header_row(rows: list[list[str]], max_rows: int = 50) -> Optional[int]:
+def _detect_header_row(rows: list[list[str]], max_rows: int = 200) -> Optional[int]:
     for index, row in enumerate(rows[:max_rows]):
         if _is_blank_row([_normalize_column(cell) for cell in row]):
             continue
@@ -215,6 +260,10 @@ def _find_column_index(columns: list[str], candidates: tuple[str, ...]) -> Optio
     return None
 
 
+def _is_probable_ticker(symbol: str) -> bool:
+    return bool(re.fullmatch(r"[A-Z][A-Z0-9./-]{0,5}", symbol))
+
+
 def _cell(row: list[str], index: int) -> str:
     if index >= len(row):
         return ""
@@ -227,14 +276,46 @@ def _is_blank_row(row: list[str]) -> bool:
 
 def _is_account_summary_row(row: list[str], symbol_col: int, quantity_col: int, header_len: int) -> bool:
     symbol = _normalize_column(_cell(row, symbol_col))
-    if symbol in {"all accounts", "account", "account total", "total", "totals"}:
+    if symbol in {"all accounts", "account", "account total", "total", "totals", "individual account"}:
         return True
     if symbol.endswith(" accounts") or symbol.endswith(" account"):
         return True
     raw_quantity = _cell(row, quantity_col)
-    if len(row) < header_len and any(marker in raw_quantity for marker in ("$", "%")):
+    if any(marker in raw_quantity for marker in ("$", "%")):
+        return True
+    if len(row) < header_len and raw_quantity:
         return True
     return False
+
+
+def _sum_market_values(rows: list[list[str]], mapping: ManualHoldingsMapping) -> Optional[float]:
+    if mapping.market_value_col is None:
+        return None
+
+    total = 0.0
+    found_value = False
+    header_len = len(rows[mapping.header_row]) if mapping.header_row < len(rows) else 0
+    for row in rows[mapping.header_row + 1 :]:
+        normalized_row = [_normalize_column(cell) for cell in row]
+        if _is_blank_row(normalized_row):
+            continue
+        if _looks_like_holdings_header(normalized_row):
+            continue
+        if _is_account_summary_row(row, mapping.symbol_col, mapping.quantity_col, header_len):
+            continue
+
+        ticker = normalize_ticker(_cell(row, mapping.symbol_col))
+        if not _is_probable_ticker(ticker):
+            continue
+        try:
+            int(parse_numeric_value(_cell(row, mapping.quantity_col)))
+            value = parse_numeric_value(_cell(row, mapping.market_value_col))
+        except (TypeError, ValueError):
+            continue
+        total += value
+        found_value = True
+
+    return total if found_value else None
 
 
 def _preview_lines(raw_text: str, line_count: int = DEBUG_LINE_COUNT) -> str:

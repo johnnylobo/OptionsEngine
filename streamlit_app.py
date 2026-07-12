@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
-from io import StringIO
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -11,9 +12,11 @@ from options_income_engine.demo import demo_holdings
 from options_income_engine.holdings import (
     HoldingsCsvError,
     ManualHoldingsMapping,
+    detect_holdings_mapping,
     parse_holdings_csv,
     parse_holdings_from_mapping,
     read_holdings_csv_rows,
+    summarize_holdings_import,
 )
 from options_income_engine.models import UserConfig
 from options_income_engine.portfolio import build_portfolio_summary
@@ -21,6 +24,42 @@ from options_income_engine.preferences import load_ticker_profiles
 from options_income_engine.providers import MarketDataError, MockProvider, build_provider
 from options_income_engine.screener import screen_income_candidates
 from options_income_engine.tiers import default_watchlist
+
+
+MERRILL_MAPPING_PATH = Path(__file__).with_name(".merrill_default_mapping.json")
+
+
+def _load_saved_merrill_mapping() -> ManualHoldingsMapping | None:
+    if not MERRILL_MAPPING_PATH.exists():
+        return None
+    try:
+        data = json.loads(MERRILL_MAPPING_PATH.read_text())
+        return ManualHoldingsMapping(
+            header_row=int(data["header_row"]),
+            symbol_col=int(data["symbol_col"]),
+            quantity_col=int(data["quantity_col"]),
+            price_col=data.get("price_col"),
+            market_value_col=data.get("market_value_col"),
+            description_col=data.get("description_col"),
+        )
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+
+
+def _save_merrill_mapping(mapping: ManualHoldingsMapping) -> None:
+    MERRILL_MAPPING_PATH.write_text(
+        json.dumps(
+            {
+                "header_row": mapping.header_row,
+                "symbol_col": mapping.symbol_col,
+                "quantity_col": mapping.quantity_col,
+                "price_col": mapping.price_col,
+                "market_value_col": mapping.market_value_col,
+                "description_col": mapping.description_col,
+            },
+            indent=2,
+        )
+    )
 
 
 load_dotenv()
@@ -49,6 +88,8 @@ st.warning(
 )
 
 demo_mode = False
+raw_rows = None
+mapping_used = None
 
 if uploaded is None:
     st.session_state["use_demo_portfolio"] = st.session_state.get("use_demo_portfolio", False)
@@ -67,20 +108,41 @@ else:
     st.session_state["use_demo_portfolio"] = False
     upload_signature = (getattr(uploaded, "name", "uploaded.csv"), getattr(uploaded, "size", None))
     try:
+        raw_rows = read_holdings_csv_rows(uploaded)
+    except HoldingsCsvError:
+        raw_rows = None
+
+    try:
         holdings = parse_holdings_csv(uploaded)
+        mapping_used = detect_holdings_mapping(raw_rows) if raw_rows is not None else None
         st.session_state.pop("manual_holdings_signature", None)
         st.session_state.pop("manual_holdings", None)
     except HoldingsCsvError:
-        if (
+        saved_mapping = _load_saved_merrill_mapping()
+        if raw_rows is not None and saved_mapping is not None:
+            result = parse_holdings_from_mapping(raw_rows, saved_mapping)
+            if result.holdings:
+                holdings = result.holdings
+                mapping_used = saved_mapping
+                st.success(f"Imported {len(holdings)} holdings using your saved Merrill mapping.")
+                if result.warnings:
+                    with st.expander("Rows skipped during import"):
+                        for warning in result.warnings:
+                            st.warning(warning)
+            else:
+                saved_mapping = None
+
+        if "holdings" not in locals() and (
             st.session_state.get("manual_holdings_signature") == upload_signature
             and st.session_state.get("manual_holdings")
         ):
             holdings = st.session_state["manual_holdings"]
+            mapping_used = st.session_state.get("manual_holdings_mapping")
             st.success(f"Using saved import mapping for {len(holdings)} holdings.")
-        else:
-            st.warning("Automatic import could not identify holdings. Use the import wizard below to map the file manually.")
+        elif "holdings" not in locals():
+            st.warning("Automatic import could not identify holdings. Use this wizard once and save the mapping.")
             try:
-                raw_rows = read_holdings_csv_rows(uploaded)
+                raw_rows = raw_rows if raw_rows is not None else read_holdings_csv_rows(uploaded)
             except HoldingsCsvError:
                 st.error(
                     "I could not read this CSV file. Please export holdings as CSV from Merrill, then upload that file here."
@@ -124,6 +186,7 @@ else:
             price_label = st.selectbox("Optional Price column", optional_labels)
             market_value_label = st.selectbox("Optional Market Value column", optional_labels)
             description_label = st.selectbox("Optional Description column", optional_labels)
+            save_default_mapping = st.checkbox("Save this as Merrill default mapping", value=True)
 
             if st.button("Use this mapping", type="primary"):
                 mapping = ManualHoldingsMapping(
@@ -143,6 +206,14 @@ else:
                 holdings = result.holdings
                 st.session_state["manual_holdings_signature"] = upload_signature
                 st.session_state["manual_holdings"] = holdings
+                st.session_state["manual_holdings_mapping"] = mapping
+                mapping_used = mapping
+                if save_default_mapping:
+                    try:
+                        _save_merrill_mapping(mapping)
+                        st.success("Saved this as your Merrill default mapping.")
+                    except OSError:
+                        st.warning("Imported holdings, but could not save the default mapping.")
                 st.success(f"Imported {len(holdings)} holdings with manual mapping.")
                 if result.warnings:
                     with st.expander("Rows skipped during import"):
@@ -166,7 +237,16 @@ config = UserConfig(
     watchlist=watchlist,
 )
 
-st.subheader("Portfolio")
+import_summary = summarize_holdings_import(holdings, raw_rows, mapping_used)
+st.subheader("Imported Holdings")
+st.success(f"Imported {len(holdings)} holdings")
+summary_columns = st.columns(3)
+if import_summary.total_market_value is None:
+    summary_columns[0].metric("Total Portfolio Value", "Not available")
+else:
+    summary_columns[0].metric("Total Portfolio Value", f"${import_summary.total_market_value:,.2f}")
+summary_columns[1].metric("Tickers With 100+ Shares", import_summary.tickers_with_100_shares)
+summary_columns[2].metric("Imported Tickers", len({holding.ticker for holding in holdings}))
 st.dataframe(pd.DataFrame([holding.__dict__ for holding in holdings]), use_container_width=True)
 
 if not run:
