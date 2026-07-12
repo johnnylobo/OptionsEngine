@@ -53,8 +53,8 @@ def build_portfolio_summary(
 
     for ticker in sorted(share_map):
         shares = share_map[ticker]
-        snapshot = provider.get_equity_snapshot(ticker)
-        price = float(snapshot.price)
+        quote = provider.get_quote(ticker)
+        price = float(quote.price)
         market_value = round(shares * price, 2)
         profile = get_ticker_profile(ticker, profiles)
         category = normalize_category(profile.category)

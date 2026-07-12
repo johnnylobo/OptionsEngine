@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from typing import Literal, Optional
 
 
@@ -55,6 +55,17 @@ class EquitySnapshot:
     ticker: str
     price: float
     next_earnings_date: Optional[date] = None
+    provider: str = ""
+    retrieved_at: Optional[datetime] = None
+    market_timestamp: Optional[datetime] = None
+    is_realtime: bool = False
+    is_delayed: bool = False
+    is_stale: bool = False
+    stale_reason: str = ""
+    source_feed: str = ""
+    request_status: str = "ok"
+    raw_symbol: str = ""
+    normalized_symbol: str = ""
 
 
 @dataclass(frozen=True)
@@ -67,9 +78,29 @@ class OptionContract:
     ask: float
     delta: Optional[float]
     iv_rank: Optional[float] = None
+    iv_percentile: Optional[float] = None
     volume: Optional[int] = None
     open_interest: Optional[int] = None
     symbol: Optional[str] = None
+    bid_size: Optional[int] = None
+    ask_size: Optional[int] = None
+    last: Optional[float] = None
+    gamma: Optional[float] = None
+    theta: Optional[float] = None
+    vega: Optional[float] = None
+    implied_volatility: Optional[float] = None
+    underlying_price: Optional[float] = None
+    provider: str = ""
+    retrieved_at: Optional[datetime] = None
+    market_timestamp: Optional[datetime] = None
+    is_realtime: bool = False
+    is_delayed: bool = False
+    is_stale: bool = False
+    stale_reason: str = ""
+    source_feed: str = ""
+    request_status: str = "ok"
+    raw_symbol: str = ""
+    normalized_symbol: str = ""
 
 
 @dataclass(frozen=True)
@@ -125,7 +156,7 @@ class Candidate:
     ask: float
     mid: float
     delta: float
-    iv_rank: float
+    iv_rank: Optional[float]
     assignment_probability: float
     premium_efficiency_score: float
     premium_per_contract: float
@@ -165,3 +196,14 @@ class Candidate:
     portfolio_risk_adjustment: float
     score: float
     contracts: int
+    data_provider: str = ""
+    data_retrieved_at: Optional[datetime] = None
+    data_market_timestamp: Optional[datetime] = None
+    data_is_realtime: bool = False
+    data_is_delayed: bool = False
+    data_is_stale: bool = False
+    data_stale_reason: str = ""
+    data_source_feed: str = ""
+    implied_volatility: Optional[float] = None
+    iv_percentile: Optional[float] = None
+    iv_rank_warning: str = ""

@@ -42,15 +42,16 @@ def screen_income_candidates(
 
     for ticker in symbols:
         profile = get_ticker_profile(ticker, profiles)
-        snapshot = provider.get_equity_snapshot(ticker)
+        equity_quote = provider.get_quote(ticker)
+        snapshot = equity_quote.to_snapshot()
         owned_contracts = max(share_map.get(ticker, 0) // 100, 0)
         owned_contracts = _apply_max_contracts(owned_contracts, profile)
 
         for expiration in config.expirations:
-            chain = provider.get_options_chain(ticker, expiration)
+            chain = provider.get_option_chain(ticker, expiration)
 
             if ticker in covered_call_tickers and owned_contracts > 0:
-                for contract in chain:
+                for contract in chain.contracts:
                     if contract.option_type != "call":
                         continue
                     candidate = score_candidate(
@@ -76,7 +77,7 @@ def screen_income_candidates(
                         candidates.append(candidate)
 
             if ticker in put_tickers:
-                for contract in chain:
+                for contract in chain.contracts:
                     if contract.option_type != "put":
                         continue
                     max_contracts = int(config.available_cash // (contract.strike * 100))
