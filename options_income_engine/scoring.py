@@ -18,6 +18,12 @@ def score_candidate(
     profile: Optional[TickerProfile] = None,
     option_exposure: Optional[OptionExposure] = None,
 ) -> Optional[Candidate]:
+    if getattr(contract, "is_stale", False):
+        return None
+    if getattr(contract, "is_delayed", False) and not getattr(contract, "provider", "").lower().startswith("demo"):
+        return None
+    if contract.bid is None or contract.ask is None:
+        return None
     if contract.bid <= 0 or contract.ask <= 0:
         return None
     if contract.delta is None:
@@ -40,6 +46,8 @@ def score_candidate(
     spread_pct = (contract.ask - contract.bid) / mid if mid > 0 else 1.0
     assignment_probability = abs_delta
     iv_rank = _normalized_iv_rank(contract.iv_rank)
+    iv_rank_multiplier = _iv_rank_multiplier(contract.iv_rank)
+    iv_rank_warning = "IV rank unavailable from selected provider." if contract.iv_rank is None else ""
     premium_per_contract = mid * 100
     total_premium = premium_per_contract * contracts
     shares = contracts * 100
@@ -52,7 +60,7 @@ def score_candidate(
     annualized_yield = weekly_yield * 52
     base_premium_efficiency_score = _premium_efficiency_score(
         total_premium=total_premium,
-        iv_rank=iv_rank,
+        iv_rank=iv_rank_multiplier,
         assignment_probability=assignment_probability,
         capital_required=capital_at_risk,
     )
@@ -106,7 +114,7 @@ def score_candidate(
         ask=round(contract.ask, 2),
         mid=mid,
         delta=round(contract.delta, 4),
-        iv_rank=round(iv_rank, 4),
+        iv_rank=round(iv_rank, 4) if iv_rank is not None else None,
         assignment_probability=round(assignment_probability, 4),
         premium_efficiency_score=round(premium_efficiency_score, 6),
         premium_per_contract=round(premium_per_contract, 2),
@@ -146,15 +154,31 @@ def score_candidate(
         portfolio_risk_adjustment=round(option_exposure.portfolio_risk_adjustment, 4),
         score=round(max(base_score, 0), 2),
         contracts=contracts,
+        data_provider=getattr(contract, "provider", ""),
+        data_retrieved_at=getattr(contract, "retrieved_at", None),
+        data_market_timestamp=getattr(contract, "market_timestamp", None),
+        data_is_realtime=getattr(contract, "is_realtime", True),
+        data_is_delayed=getattr(contract, "is_delayed", False),
+        data_is_stale=getattr(contract, "is_stale", False),
+        data_stale_reason=getattr(contract, "stale_reason", ""),
+        data_source_feed=getattr(contract, "source_feed", ""),
+        implied_volatility=getattr(contract, "implied_volatility", None),
+        iv_percentile=getattr(contract, "iv_percentile", None),
+        iv_rank_warning=iv_rank_warning,
     )
 
 
-def _normalized_iv_rank(iv_rank: Optional[float]) -> float:
+def _normalized_iv_rank(iv_rank: Optional[float]) -> Optional[float]:
     if iv_rank is None:
-        return 1.0
+        return None
     if iv_rank > 1:
         iv_rank = iv_rank / 100
     return max(0.0, min(iv_rank, 1.0))
+
+
+def _iv_rank_multiplier(iv_rank: Optional[float]) -> float:
+    normalized = _normalized_iv_rank(iv_rank)
+    return 1.0 if normalized is None else normalized
 
 
 def _premium_efficiency_score(

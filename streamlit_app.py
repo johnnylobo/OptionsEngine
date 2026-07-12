@@ -7,11 +7,12 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
+from options_income_engine.demo import demo_holdings
 from options_income_engine.holdings import HoldingsCsvError, parse_holdings_csv
 from options_income_engine.models import UserConfig
 from options_income_engine.portfolio import build_portfolio_summary
 from options_income_engine.preferences import load_ticker_profiles
-from options_income_engine.providers import MarketDataError, build_provider
+from options_income_engine.providers import MarketDataError, available_provider_names, build_provider, test_market_data_connection
 from options_income_engine.screener import screen_income_candidates
 from options_income_engine.tiers import default_watchlist
 
@@ -25,6 +26,8 @@ st.caption("Local screening only. This app never places trades, logs in to broke
 
 with st.sidebar:
     st.header("Inputs")
+    provider_options = available_provider_names()
+    selected_provider = st.selectbox("Market data provider", provider_options, index=0)
     uploaded = st.file_uploader("Merrill holdings CSV", type=["csv"])
     watchlist_text = st.text_area("Approved watchlist tickers", value=", ".join(default_watchlist()), height=110)
     available_cash = st.number_input("Available cash", min_value=0.0, value=10000.0, step=500.0, format="%.2f")
@@ -41,23 +44,57 @@ st.warning(
     "For education and screening only. Review assignment risk, earnings dates, spreads, liquidity, and tax consequences before making any trade."
 )
 
-if uploaded is None:
-    st.info("Upload a holdings CSV to begin. A sample format is included in data/sample_holdings.csv.")
-    st.stop()
+demo_mode = selected_provider == "Demo"
 
-try:
-    holdings = parse_holdings_csv(uploaded)
-except HoldingsCsvError as exc:
-    st.error(
-        "The uploaded file does not look like a holdings CSV.\n\n"
-        "Please export holdings with Symbol and Quantity/Shares columns."
-    )
-    if exc.preview:
-        st.code(exc.preview, language="text")
+with st.expander("Market Data Status", expanded=False):
+    st.caption("Use this before screening to verify authentication, options access, bid/ask data, Greeks, timestamps, and data entitlement status.")
+    if st.button("Test Market Data Connection"):
+        try:
+            connection_provider = build_provider(selected_provider)
+            result = test_market_data_connection(connection_provider)
+            if result.status == "Connected":
+                st.success(result.status)
+            elif result.status == "Data returned but is delayed":
+                st.warning(result.status)
+            else:
+                st.error(result.status)
+            st.write(result.message)
+            st.write(
+                {
+                    "Provider": result.provider,
+                    "Quote": result.quote_ok,
+                    "Expirations": result.expirations_ok,
+                    "Option Chain": result.option_chain_ok,
+                    "Bid/Ask": result.has_bid_ask,
+                    "Greeks": result.has_greeks,
+                    "Timestamps": result.has_timestamps,
+                    "Status": result.realtime_status,
+                }
+            )
+        except MarketDataError as exc:
+            st.error("Provider unavailable")
+            st.write(str(exc))
+
+if uploaded is None and demo_mode:
+    holdings = demo_holdings()
+    st.success("Loaded demo portfolio with demo market data.")
+elif uploaded is None:
+    st.info("Upload a holdings CSV to begin, or choose Demo as the market-data provider.")
     st.stop()
-except Exception as exc:
-    st.error(str(exc))
-    st.stop()
+else:
+    try:
+        holdings = parse_holdings_csv(uploaded)
+    except HoldingsCsvError as exc:
+        st.error(
+            "The uploaded file does not look like a holdings CSV.\n\n"
+            "Please export holdings with Symbol and Quantity/Shares columns."
+        )
+        if exc.preview:
+            st.code(exc.preview, language="text")
+        st.stop()
+    except Exception as exc:
+        st.error(str(exc))
+        st.stop()
 
 watchlist = [item.strip().upper() for item in watchlist_text.replace("\n", ",").split(",") if item.strip()]
 expiration_values = expirations if isinstance(expirations, list) else [expirations]
@@ -78,7 +115,7 @@ if not run:
     st.stop()
 
 try:
-    provider = build_provider()
+    provider = build_provider(selected_provider)
     profiles = load_ticker_profiles()
     with st.spinner("Fetching option chains and scoring candidates..."):
         portfolio = build_portfolio_summary(
@@ -88,16 +125,35 @@ try:
             cash_balance=available_cash,
         )
         candidates = screen_income_candidates(holdings=holdings, config=config, provider=provider, profiles=profiles)
+        provider_health = provider.health()
 except MarketDataError as exc:
     st.error(str(exc))
-    st.info("For a no-key demo, set OPTIONS_PROVIDER=mock in your .env file.")
+    st.info("Choose Demo mode for a no-key walkthrough, or configure MASSIVE_API_KEY / TRADIER_ACCESS_TOKEN.")
     st.stop()
 except Exception as exc:
     st.error(f"Screening failed: {exc}")
     st.stop()
 
+st.subheader("Market Data Status")
+status_columns = st.columns(4)
+status_columns[0].metric("Data", provider_health.provider)
+status_columns[1].metric("Status", provider_health.realtime_status)
+last_refresh = provider_health.last_successful_refresh
+status_columns[2].metric("Updated", last_refresh.astimezone().strftime("%I:%M:%S %p") if last_refresh else "Not refreshed")
+status_columns[3].metric("Health", provider_health.status.title())
+if provider_health.message:
+    st.warning(provider_health.message)
+if provider_health.is_delayed and not provider.is_demo:
+    st.warning("Data delayed / stale — recommendations disabled.")
+if provider_health.realtime_status == "Unknown":
+    st.warning("Data entitlement unknown — the app will not label this feed as real-time.")
+if any(candidate.data_is_stale for candidate in candidates):
+    st.warning("Some market data is stale. Stale contracts are not labeled as strong candidates.")
+if st.button("Refresh Market Data"):
+    st.rerun()
+
 if not candidates:
-    st.warning("No candidates passed the filters. Try a wider delta range, lower minimum yield, or a later expiration.")
+    st.warning("No candidates passed the filters. Stale or missing option bid/ask data disables recommendations.")
     st.stop()
 
 st.subheader("Portfolio Intelligence")
@@ -154,7 +210,10 @@ display_columns = {
     "ask": "Ask",
     "mid": "Mid",
     "delta": "Delta",
+    "implied_volatility": "IV",
     "iv_rank": "IV Rank",
+    "iv_percentile": "IV Percentile",
+    "iv_rank_warning": "IV Rank Note",
     "assignment_probability": "Est. Assignment Probability",
     "premium_efficiency_score": "Premium Efficiency Score",
     "premium_per_contract": "Premium / Contract",
@@ -186,12 +245,19 @@ display_columns = {
     "shares_remaining_if_called_away": "Shares Remaining If Called Away",
     "portfolio_risk_alerts": "Portfolio Risk Alerts",
     "portfolio_risk_adjustment": "Portfolio Risk Adjustment",
+    "data_provider": "Data Provider",
+    "data_market_timestamp": "Market Timestamp",
+    "data_is_realtime": "Real-Time Data",
+    "data_is_delayed": "Delayed Data",
+    "data_source_feed": "Source Feed",
     "score": "Score",
     "contracts": "Contracts",
 }
 df = df[list(display_columns)].rename(columns=display_columns)
 for percent_column in [
     "IV Rank",
+    "IV",
+    "IV Percentile",
     "Est. Assignment Probability",
     "% OTM",
     "Weekly Yield",
@@ -211,6 +277,8 @@ st.dataframe(
         "Weekly Yield": st.column_config.ProgressColumn("Weekly Yield", format="%.2f%%", min_value=0, max_value=2.0),
         "Annualized Yield": st.column_config.NumberColumn("Annualized Yield", format="%.2f%%"),
         "IV Rank": st.column_config.NumberColumn("IV Rank", format="%.2f%%"),
+        "IV": st.column_config.NumberColumn("IV", format="%.2f%%"),
+        "IV Percentile": st.column_config.NumberColumn("IV Percentile", format="%.2f%%"),
         "Est. Assignment Probability": st.column_config.NumberColumn("Est. Assignment Probability", format="%.2f%%"),
         "Premium Efficiency Score": st.column_config.NumberColumn("Premium Efficiency Score", format="%.4f"),
         "Preference Adjustment": st.column_config.NumberColumn("Preference Adjustment", format="%.2fx"),
