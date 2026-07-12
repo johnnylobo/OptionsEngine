@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from io import StringIO
 
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
+from options_income_engine.dashboard import (
+    aggregate_risk_alerts,
+    build_dashboard_summary,
+    calculate_income_forecasts,
+    explain_candidate,
+    filter_candidates,
+    select_best_opportunities,
+)
 from options_income_engine.demo import demo_holdings
 from options_income_engine.holdings import HoldingsCsvError, parse_holdings_csv
 from options_income_engine.models import UserConfig
@@ -156,20 +163,90 @@ if not candidates:
     st.warning("No candidates passed the filters. Stale or missing option bid/ask data disables recommendations.")
     st.stop()
 
-st.subheader("Portfolio Intelligence")
-metric_columns = st.columns(4)
-metric_columns[0].metric("Portfolio Market Value", f"${portfolio.total_portfolio_market_value:,.2f}")
-metric_columns[1].metric("Cash Balance", f"${portfolio.cash_balance:,.2f}")
+summary = build_dashboard_summary(candidates, portfolio)
+best_opportunities = select_best_opportunities(candidates)
+income_forecasts = calculate_income_forecasts(candidates)
+risk_alerts = aggregate_risk_alerts(candidates, portfolio)
+
+st.subheader("Executive Dashboard")
+summary_columns = st.columns(4)
+summary_columns[0].metric("Total Portfolio Value", f"${summary.total_portfolio_value:,.2f}")
+summary_columns[1].metric("Cash Available", f"${summary.cash_available:,.2f}")
+summary_columns[2].metric("Candidates", f"{summary.candidate_count}")
+summary_columns[3].metric("Sell Recommendations", f"{summary.sell_recommendation_count}")
+
+summary_columns = st.columns(4)
+summary_columns[0].metric("Best Covered Call Efficiency", f"{summary.best_covered_call_efficiency:.4f}")
+summary_columns[1].metric("Best Put Efficiency", f"{summary.best_cash_secured_put_efficiency:.4f}")
+summary_columns[2].metric("Sell-Rated Premium", f"${summary.sell_rated_premium_available:,.2f}")
+summary_columns[3].metric("Sell Put Cash Required", f"${summary.sell_rated_put_cash_required:,.2f}")
+
+st.subheader("Best Opportunities")
+opportunity_columns = st.columns(3)
+for column, title, candidate in [
+    (opportunity_columns[0], "Best Covered Call", best_opportunities.best_covered_call),
+    (opportunity_columns[1], "Best Cash-Secured Put", best_opportunities.best_cash_secured_put),
+    (opportunity_columns[2], "Best Overall Trade", best_opportunities.best_overall_trade),
+]:
+    with column:
+        st.markdown(f"**{title}**")
+        if candidate is None:
+            st.info("No candidate available.")
+        else:
+            st.metric(candidate.ticker, f"${candidate.total_premium:,.2f}", candidate.strategy)
+            st.write(
+                {
+                    "Expiration": candidate.expiration,
+                    "Strike": f"${candidate.strike:.2f}",
+                    "Premium Efficiency": f"{candidate.premium_efficiency_score:.4f}",
+                    "Assignment Probability": f"{candidate.assignment_probability * 100:.2f}%",
+                    "Assignment Outcome": candidate.assignment_outcome,
+                    "Portfolio Risk Alerts": candidate.portfolio_risk_alerts or "None",
+                    "Why": explain_candidate(candidate),
+                }
+            )
+
+st.subheader("Income Forecast")
+forecast_df = pd.DataFrame(
+    [
+        {
+            "Scenario": forecast.label,
+            "Total Premium": forecast.total_premium,
+            "Cash Required for Puts": forecast.cash_required_for_puts,
+            "Shares Covered for Calls": forecast.shares_covered_for_calls,
+            "Average Assignment Probability": forecast.average_assignment_probability * 100,
+        }
+        for forecast in income_forecasts
+    ]
+)
+st.caption("Available opportunity premium from the current screen only.")
+st.dataframe(
+    forecast_df,
+    use_container_width=True,
+    column_config={
+        "Total Premium": st.column_config.NumberColumn("Total Premium", format="$%.2f"),
+        "Cash Required for Puts": st.column_config.NumberColumn("Cash Required for Puts", format="$%.2f"),
+        "Average Assignment Probability": st.column_config.NumberColumn(
+            "Average Assignment Probability",
+            format="%.2f%%",
+        ),
+    },
+)
+
+st.subheader("Portfolio Health")
+health_columns = st.columns(4)
+health_columns[0].metric("Portfolio Market Value", f"${portfolio.total_portfolio_market_value:,.2f}")
+health_columns[1].metric("Cash Balance", f"${portfolio.cash_balance:,.2f}")
+health_columns[2].metric(
+    "Cash %",
+    f"{(portfolio.cash_balance / portfolio.total_account_value * 100) if portfolio.total_account_value else 0:.2f}%",
+)
 largest_single = portfolio.largest_single_name
-metric_columns[2].metric(
+health_columns[3].metric(
     "Largest Single Name",
     f"{largest_single.ticker} {largest_single.portfolio_weight * 100:.2f}%" if largest_single else "N/A",
 )
 largest_category = portfolio.largest_category
-metric_columns[3].metric(
-    "Largest Category",
-    f"{largest_category[0]} {largest_category[1] * 100:.2f}%" if largest_category else "N/A",
-)
 
 category_df = pd.DataFrame(
     [
@@ -192,13 +269,53 @@ top_ticker_df = pd.DataFrame(
 )
 exposure_columns = st.columns(2)
 with exposure_columns[0]:
-    st.caption("Category Exposure")
+    st.caption(
+        f"Largest Category: {largest_category[0]} {largest_category[1] * 100:.2f}%"
+        if largest_category
+        else "Category Exposure"
+    )
     st.dataframe(category_df, use_container_width=True)
 with exposure_columns[1]:
     st.caption("Top 10 Ticker Exposures")
     st.dataframe(top_ticker_df, use_container_width=True)
 
-df = pd.DataFrame([candidate.__dict__ for candidate in candidates])
+st.subheader("Risk Alerts")
+if risk_alerts:
+    for alert in risk_alerts:
+        st.warning(alert)
+else:
+    st.success("No major risk alerts in the current screen.")
+
+st.subheader("Ranked Trade Candidates")
+filter_columns = st.columns(4)
+strategy_filter = filter_columns[0].selectbox(
+    "Strategy",
+    ["All", "Covered Calls", "Cash-Secured Puts"],
+)
+recommendation_filter = filter_columns[1].selectbox(
+    "Recommendation",
+    ["All", "Sell", "Maybe", "Skip"],
+)
+ticker_search = filter_columns[2].text_input("Ticker search")
+min_efficiency = filter_columns[3].number_input(
+    "Minimum Premium Efficiency Score",
+    min_value=0.0,
+    value=0.0,
+    step=0.01,
+)
+filtered_candidates = filter_candidates(
+    candidates,
+    strategy=strategy_filter,
+    recommendation=recommendation_filter,
+    ticker_search=ticker_search,
+    min_premium_efficiency_score=float(min_efficiency),
+)
+
+if not filtered_candidates:
+    st.info("No candidates match the selected filters.")
+    st.stop()
+
+df = pd.DataFrame([candidate.__dict__ for candidate in filtered_candidates])
 display_columns = {
     "rank": "Rank",
     "ticker": "Ticker",
@@ -269,7 +386,6 @@ for percent_column in [
 ]:
     df[percent_column] = df[percent_column] * 100
 
-st.subheader("Ranked Trade Candidates")
 st.dataframe(
     df,
     use_container_width=True,
