@@ -19,7 +19,27 @@ It ranks candidate trades only; it never submits orders or connects to Merrill f
 - Earnings-before-expiration trades are rejected.
 - Wide spreads, low volume, low open interest, and assignment risk are surfaced clearly.
 
-## Setup
+## Easy Mode
+
+On macOS, double-click `run_app.command` to start the app. The first run may take a minute because it creates the local Python environment and installs the app requirements.
+
+You can also run one command from this folder:
+
+```bash
+./run_app.command
+```
+
+Once the app opens:
+
+- Upload your Merrill holdings CSV.
+- The app imports Merrill holdings automatically in normal use, including exports with account summaries before the holdings table.
+- After import, confirm the parsed holdings preview, total portfolio value, and number of tickers with 100+ shares, then click `Screen candidates`.
+- If the app cannot find the holdings table automatically, use the Holdings Import Wizard once to pick the header row and map Symbol and Quantity/Shares. You can save that as the Merrill default mapping for future uploads.
+- If you do not have a CSV handy, click `Use Demo Portfolio` to explore the dashboard with sample holdings and mock market data.
+
+You do not need to clean Merrill CSV files manually. The import flow is designed to handle account summaries, blank rows, quoted column names, trailing spaces, and share quantities with commas.
+
+## Manual Setup
 
 ```bash
 python -m venv .venv
@@ -84,6 +104,8 @@ Optional columns:
 - `Account`
 
 See `data/sample_holdings.csv`.
+
+If automatic import cannot identify the holdings table, the app first tries your saved Merrill default mapping if one exists. If that also cannot import holdings, the app opens a Holdings Import Wizard instead of stopping. The wizard previews the first 100 CSV rows, lets you choose the real header row, and lets you map Symbol and Quantity/Shares columns manually, with optional Price, Market Value, and Description columns. This is designed for messy brokerage exports with account summaries, disclaimers, blank rows, repeated section headers, quoted headers, and trailing spaces in column names.
 
 ## Default Portfolio Tiers
 
