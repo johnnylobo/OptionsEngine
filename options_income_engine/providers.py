@@ -66,6 +66,9 @@ class MarketDataProvider:
     def get_historical_volatility(self, ticker: str) -> Optional[float]:
         return None
 
+    def supports_ticker(self, ticker: str) -> bool:
+        return True
+
     def health(self) -> ProviderHealth:
         return ProviderHealth(provider=self.provider_name, status="unknown", checked_at=now_utc(), realtime_status="Unknown")
 
@@ -537,27 +540,34 @@ class MockProvider(MarketDataProvider):
 
     provider_name = "Demo"
     is_demo = True
+    demo_prices = {
+        "TQQQ": 84.0,
+        "NVDA": 164.0,
+        "GOOG": 188.0,
+        "AMZN": 224.0,
+        "MU": 132.0,
+        "AMD": 155.0,
+        "AEHR": 15.5,
+        "CRWD": 320.0,
+        "IREN": 9.0,
+        "RKLB": 28.0,
+        "LUNR": 12.5,
+    }
 
     def __init__(self, freshness_rules: Optional[FreshnessRules] = None) -> None:
         self.freshness_rules = freshness_rules or FreshnessRules()
         self.last_successful_refresh = now_utc()
 
+    def supports_ticker(self, ticker: str) -> bool:
+        return normalize_ticker(ticker) in self.demo_prices
+
     def get_quote(self, ticker: str) -> EquityQuote:
         symbol = normalize_ticker(ticker)
-        prices = {
-            "TQQQ": 84.0,
-            "NVDA": 164.0,
-            "GOOG": 188.0,
-            "AMZN": 224.0,
-            "MU": 132.0,
-            "AMD": 155.0,
-            "AEHR": 15.5,
-            "CRWD": 320.0,
-            "IREN": 9.0,
-            "RKLB": 28.0,
-            "LUNR": 12.5,
-        }
-        price = prices.get(symbol, 50.0)
+        if not self.supports_ticker(symbol):
+            raise MarketDataError(
+                f"Demo market data does not include {symbol}. Use Demo Portfolio or connect Massive/Tradier."
+            )
+        price = self.demo_prices[symbol]
         trace = trace_for(
             provider=self.provider_name,
             raw_symbol=symbol,
@@ -575,6 +585,10 @@ class MockProvider(MarketDataProvider):
 
     def get_option_chain(self, ticker: str, expiration: date) -> OptionChain:
         symbol = normalize_ticker(ticker)
+        if not self.supports_ticker(symbol):
+            raise MarketDataError(
+                f"Demo market data does not include {symbol}. Use Demo Portfolio or connect Massive/Tradier."
+            )
         price = self.get_quote(symbol).price
         retrieved_at = now_utc()
         contracts: list[OptionContractSnapshot] = []

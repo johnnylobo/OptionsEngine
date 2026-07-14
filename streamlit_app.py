@@ -28,10 +28,14 @@ from options_income_engine.holdings import (
     summarize_holdings_import,
 )
 from options_income_engine.models import UserConfig
-from options_income_engine.portfolio import build_portfolio_summary
 from options_income_engine.preferences import load_ticker_profiles
 from options_income_engine.providers import MarketDataError, available_provider_names, build_provider, test_market_data_connection
-from options_income_engine.screener import screen_income_candidates
+from options_income_engine.screener import (
+    DEMO_REAL_PORTFOLIO_MESSAGE,
+    diagnose_screening_universe,
+    screen_income_candidates_with_diagnostics,
+    screening_suggestions,
+)
 from options_income_engine.tiers import default_watchlist
 
 
@@ -69,6 +73,35 @@ def _save_merrill_mapping(mapping: ManualHoldingsMapping) -> None:
             indent=2,
         )
     )
+
+
+def _show_no_results(diagnostics) -> None:
+    st.error("No candidates matched. Here is why.")
+    metric_columns = st.columns(4)
+    metric_columns[0].metric("Holdings Scanned", diagnostics.holdings_scanned)
+    metric_columns[1].metric("Provider-Supported Tickers", diagnostics.supported_by_provider)
+    metric_columns[2].metric("Unsupported Tickers", diagnostics.unsupported_by_provider)
+    metric_columns[3].metric("Contracts Checked", diagnostics.contracts_screened)
+
+    rejection_rows = [
+        {"Reason": "Rejected by expiration", "Count": diagnostics.rejected_by_expiration},
+        {"Reason": "Rejected by delta", "Count": diagnostics.rejected_by_delta},
+        {"Reason": "Rejected by premium yield", "Count": diagnostics.rejected_by_premium_yield},
+        {"Reason": "Rejected by spread/liquidity", "Count": diagnostics.rejected_by_spread_liquidity},
+        {"Reason": "Rejected by stale or missing data", "Count": diagnostics.rejected_by_stale_or_missing_data},
+    ]
+    st.dataframe(pd.DataFrame(rejection_rows), use_container_width=True)
+
+    if diagnostics.unsupported_tickers:
+        st.warning("Unsupported tickers: " + ", ".join(diagnostics.unsupported_tickers[:25]))
+    if diagnostics.provider_errors:
+        with st.expander("Market data messages"):
+            for error in diagnostics.provider_errors[:25]:
+                st.warning(error)
+
+    st.subheader("Suggested Filter Changes")
+    for suggestion in screening_suggestions(diagnostics):
+        st.write(f"- {suggestion}")
 
 
 load_dotenv()
@@ -286,27 +319,63 @@ summary_columns[1].metric("Tickers With 100+ Shares", import_summary.tickers_wit
 summary_columns[2].metric("Imported Tickers", len({holding.ticker for holding in holdings}))
 st.dataframe(pd.DataFrame([holding.__dict__ for holding in holdings]), use_container_width=True)
 
+real_upload_with_demo_provider = uploaded is not None and selected_provider == "Demo"
+if real_upload_with_demo_provider:
+    st.warning(DEMO_REAL_PORTFOLIO_MESSAGE)
+
 if not run:
     st.stop()
 
 try:
     provider = build_provider("Demo" if demo_mode else selected_provider)
     profiles = load_ticker_profiles()
-    with st.spinner("Fetching option chains and scoring candidates..."):
-        portfolio = build_portfolio_summary(
-            holdings=holdings,
-            provider=provider,
-            profiles=profiles,
-            cash_balance=available_cash,
-        )
-        candidates = screen_income_candidates(holdings=holdings, config=config, provider=provider, profiles=profiles)
+    provider_health = provider.health()
+    candidates = []
+    portfolio = None
+    diagnostics = None
+    with st.spinner("Screening candidates..."):
+        progress_bar = st.progress(0)
+        progress_text = st.empty()
+
+        if real_upload_with_demo_provider and provider.is_demo:
+            diagnostics = diagnose_screening_universe(holdings=holdings, config=config, provider=provider)
+            progress_bar.progress(1.0)
+            progress_text.write(f"Screened 0 of {diagnostics.tickers_scanned} tickers with Demo market data.")
+        else:
+            def update_progress(current: int, total: int, ticker: str) -> None:
+                progress_bar.progress(current / max(total, 1))
+                progress_text.write(f"Screening {current} of {total}: {ticker}")
+
+            result = screen_income_candidates_with_diagnostics(
+                holdings=holdings,
+                config=config,
+                provider=provider,
+                profiles=profiles,
+                progress_callback=update_progress,
+            )
+            candidates = result.candidates
+            diagnostics = result.diagnostics
+            portfolio = result.portfolio
+            if diagnostics.tickers_scanned == 0:
+                progress_bar.progress(1.0)
+                progress_text.write("No tickers were eligible for screening.")
+            elif diagnostics.supported_by_provider == 0:
+                progress_bar.progress(1.0)
+                progress_text.write("No tickers were supported by the selected provider.")
+            else:
+                progress_bar.progress(1.0)
+                progress_text.write(f"Screened {diagnostics.supported_by_provider} provider-supported tickers.")
         provider_health = provider.health()
+    st.success(f"Screening complete: {len(candidates)} candidates found.")
 except MarketDataError as exc:
-    st.error(str(exc))
+    st.error("Screening could not connect to market data.")
+    st.info(str(exc))
     st.info("Choose Demo for a no-key walkthrough, or configure MASSIVE_API_KEY / TRADIER_ACCESS_TOKEN.")
     st.stop()
 except Exception as exc:
-    st.error(f"Screening failed: {exc}")
+    st.error("Screening stopped before results could be shown.")
+    st.info(f"What happened: {exc}")
+    st.info("Try Use Demo Portfolio, relax the filters, or confirm the selected provider has options-chain access.")
     st.stop()
 
 st.subheader("Market Data Status")
@@ -328,7 +397,12 @@ if st.button("Refresh Market Data"):
     st.rerun()
 
 if not candidates:
-    st.warning("No candidates passed the filters. Stale or missing option bid/ask data disables recommendations.")
+    _show_no_results(diagnostics)
+    st.stop()
+
+if portfolio is None:
+    st.error("Screening found candidates, but portfolio exposure could not be calculated.")
+    st.info("Refresh market data or choose a provider that supports the uploaded holdings.")
     st.stop()
 
 summary = build_dashboard_summary(candidates, portfolio)
